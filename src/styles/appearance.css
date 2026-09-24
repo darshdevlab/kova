@@ -1,0 +1,326 @@
+.workspace-shell {
+  grid-template-rows: 64px 58px minmax(0, 1fr) 28px;
+}
+.workspace-sidebar {
+  grid-row: 2/4;
+  background: var(--sidebar-bg, var(--surface));
+  --text: var(--sidebar-text);
+  --text-secondary: var(--sidebar-muted);
+  --text-muted: var(--sidebar-muted);
+  --border: var(--sidebar-border);
+}
+.workspace-main {
+  grid-row: 3;
+  grid-column: 2;
+}
+.code-workspace > textarea {
+  background: var(--editor-bg, var(--canvas));
+  color: var(--editor-text, var(--text));
+}
+.preview-stage {
+  background: var(--editor-bg, var(--canvas));
+}
+.preview-status {
+  color: var(--editor-text, var(--text));
+}
+.preview-status .text-button {
+  color: var(--editor-text, var(--text));
+}
+.ide-statusbar {
+  grid-column: 1/-1;
+  grid-row: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  background: var(--status-bg, var(--surface));
+  color: var(--status-text, var(--text-secondary));
+  border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  min-width: 0;
+}
+.statusbar-left,
+.statusbar-right {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 16px;
+}
+.ide-statusbar button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 260px;
+  height: 100%;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0 7px;
+  color: inherit;
+  font-size: 10px;
+}
+.ide-statusbar button:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.ide-statusbar button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ide-statusbar svg {
+  width: 12px;
+  height: 12px;
+}
+.statusbar-local,
+.statusbar-version {
+  font: 10px var(--font-mono);
+  opacity: 0.85;
+  white-space: nowrap;
+}
+.theme-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.theme-preset {
+  display: block;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  text-align: left;
+}
+.theme-preset:hover {
+  border-color: var(--border-strong);
+}
+.theme-preset.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.ide-swatch {
+  display: grid;
+  overflow: hidden;
+  height: 79px;
+  grid-template-columns: 30px 1fr;
+  grid-template-rows: 1fr 8px;
+  background: var(--sample-canvas);
+  border: 1px solid color-mix(in srgb, var(--sample-text) 15%, transparent);
+  border-radius: 3px;
+}
+.sample-sidebar {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  background: var(--sample-sidebar);
+  padding: 12px 5px;
+}
+.sample-sidebar i {
+  display: block;
+  height: 3px;
+  background: color-mix(in srgb, var(--sample-text) 28%, transparent);
+}
+.sample-sidebar i:nth-child(2) {
+  background: var(--sample-accent);
+}
+.sample-code {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 5px;
+  padding: 9px;
+}
+.sample-code i {
+  width: 70%;
+  height: 3px;
+  background: color-mix(in srgb, var(--sample-text) 35%, transparent);
+}
+.sample-code i:first-child {
+  width: 45%;
+  background: var(--sample-accent);
+}
+.sample-code i:nth-child(2) {
+  margin-left: 10%;
+  width: 65%;
+}
+.sample-code i:last-child {
+  width: 35%;
+}
+.sample-status {
+  grid-column: 1/-1;
+  background: var(--sample-status);
+}
+.theme-preset-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+  gap: 4px;
+  padding-top: 5px;
+}
+.theme-preset-label strong {
+  font-size: 11px;
+}
+.theme-preset-label svg {
+  width: 12px;
+  height: 12px;
+  color: var(--accent);
+}
+.theme-preset > small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.appearance-custom-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 26px 0 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 22px;
+  gap: 12px;
+}
+.appearance-custom-heading h3 {
+  margin: 0;
+  font-size: 13px;
+}
+.appearance-custom-heading .text-button {
+  font-size: 11px;
+}
+.theme-color-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.theme-color-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.theme-color-control input[type="color"] {
+  width: 31px;
+  height: 31px;
+  flex: 0 0 31px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+.theme-color-control input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.theme-color-control input[type="color"]::-webkit-color-swatch {
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+}
+.theme-color-control strong,
+.theme-color-control code {
+  display: block;
+}
+.theme-color-control strong {
+  font-size: 11px;
+}
+.theme-color-control code {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+@media (max-width: 680px) {
+  .workspace-shell {
+    grid-template-rows: 56px 52px minmax(0, 1fr) 27px 58px;
+  }
+  .workspace-main {
+    grid-column: 1;
+  }
+  .mobile-workspace-nav {
+    grid-row: 5;
+  }
+  .ide-statusbar {
+    padding: 0 8px;
+    gap: 6px;
+  }
+  .ide-statusbar button {
+    max-width: 170px;
+    padding: 0 3px;
+    font-size: 9px;
+  }
+  .statusbar-left,
+  .statusbar-right {
+    gap: 7px;
+  }
+  .ide-statusbar .statusbar-checks,
+  .statusbar-local,
+  .statusbar-version {
+    display: none;
+  }
+  .theme-preset-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .theme-color-control {
+    gap: 7px;
+    padding: 8px;
+  }
+  .theme-color-control strong {
+    font-size: 10px;
+  }
+  .theme-color-control code {
+    font-size: 9px;
+  }
+}
+.agent-canvas {
+  background: var(--canvas);
+}
+.flow-node {
+  background: var(--surface-raised);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.flow-node.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+.flow-node-type {
+  color: var(--text-secondary);
+}
+.flow-node-type > i {
+  background: var(--accent);
+}
+.flow-node p,
+.graph-caption {
+  color: var(--text-muted);
+}
+.react-flow__handle {
+  background: var(--accent) !important;
+  border-color: var(--surface-raised) !important;
+}
+.react-flow__edge-path {
+  stroke: var(--text-muted) !important;
+}
+.react-flow__edge-text {
+  fill: var(--text-secondary) !important;
+}
+.react-flow__edge-textbg {
+  fill: var(--canvas) !important;
+}
+.react-flow__controls {
+  border-color: var(--border-strong);
+}
+.react-flow__controls-button {
+  background: var(--surface-raised) !important;
+  border-color: var(--border) !important;
+  fill: var(--text) !important;
+}
+.react-flow__attribution {
+  background: var(--surface) !important;
+}
+.react-flow__attribution a {
+  color: var(--text-muted) !important;
+}

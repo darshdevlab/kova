@@ -28,6 +28,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useWorkspace } from "@/lib/workspace-state";
+import { useTheme } from "@/lib/theme";
 import { SurfaceHeader, NextStep } from "@/components/ui";
 import "@xyflow/react/dist/style.css";
 
@@ -148,6 +149,7 @@ function WorkflowNode({ data, selected }: NodeProps<FlowNode>) {
 const nodeTypes = { workflow: WorkflowNode };
 
 export function AgentFlow() {
+  const { preset, tokens } = useTheme();
   const { project, state, update, notify, log, navigate } = useWorkspace();
   const key = `kova:graph:v2:${project.id}`;
   const [saved] = useState(() => {
@@ -280,10 +282,10 @@ export function AgentFlow() {
             maxZoom={1.5}
             snapToGrid
             snapGrid={[20, 20]}
-            colorMode="dark"
+            colorMode={preset.mode}
             defaultEdgeOptions={{ type: "smoothstep" }}
           >
-            <Background gap={24} size={1} color="#333738" />
+            <Background gap={24} size={1} color={tokens.border} />
             <Controls showInteractive={false} />
           </ReactFlow>
           <div className="graph-caption">

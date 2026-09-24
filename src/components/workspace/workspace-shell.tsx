@@ -12,10 +12,12 @@ import {
   Database,
   FileText,
   FlaskConical,
+  GitBranch,
   GitPullRequest,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Palette,
   Rocket,
   Search,
   Settings,
@@ -26,6 +28,8 @@ import {
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { Modal } from "@/components/ui";
+import { ThemePicker } from "@/components/theme-picker";
+import { useTheme } from "@/lib/theme";
 import { readProjects, writeProjects } from "@/lib/storage";
 import {
   downloadFile,
@@ -76,6 +80,8 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
   const [search, setSearch] = useState("");
   const [share, setShare] = useState(false);
   const [toast, setToast] = useState("");
+  const [showTheme, setShowTheme] = useState(false);
+  const { preset, settings: appearance } = useTheme();
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
@@ -98,8 +104,6 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
       const requested = new URLSearchParams(location.search).get("view");
       if (ITEMS.some((item) => item.id === requested))
         setView(requested as WorkspaceView);
-      document.documentElement.dataset.theme =
-        localStorage.getItem("kova:theme:v2") || "dark";
     }, 0);
     return () => clearTimeout(timer);
   }, [projectId, router]);
@@ -357,6 +361,54 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
         <main className={`workspace-main view-${view}`} key={view}>
           {renderView()}
         </main>
+        <footer className="ide-statusbar" aria-label="Workspace status">
+          <div className="statusbar-left">
+            <button
+              type="button"
+              onClick={() => navigate("git")}
+              title="Configured branch (local)"
+              aria-label="Open branch settings"
+            >
+              <GitBranch />
+              <span>{state.branch}</span>
+            </button>
+            <button
+              type="button"
+              className="statusbar-checks"
+              onClick={() => navigate("tests")}
+              title="Project configuration checks"
+            >
+              <Check />
+              <span>
+                {state.verifiedVersion === state.version
+                  ? "Checks passed"
+                  : "Checks pending"}
+              </span>
+            </button>
+          </div>
+          <div className="statusbar-right">
+            <span className="statusbar-local">Local workspace</span>
+            <span className="statusbar-version">v{state.version}</span>
+            <button
+              type="button"
+              onClick={() => setShowTheme(true)}
+              aria-label="Choose color theme"
+              title="Choose color theme"
+            >
+              <Palette />
+              <span>
+                {Object.keys(appearance.overrides).length
+                  ? "Custom"
+                  : preset.name}
+              </span>
+            </button>
+          </div>
+        </footer>
+        {showTheme && (
+          <Modal title="Color theme" close={() => setShowTheme(false)}>
+            <ThemePicker />
+          </Modal>
+        )}
         <nav
           className="mobile-workspace-nav"
           aria-label="Mobile project sections"
@@ -404,6 +456,17 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
               />
             </label>
             <div className="command-results">
+              <button
+                type="button"
+                onClick={() => {
+                  setCommand(false);
+                  setShowTheme(true);
+                }}
+              >
+                <Palette />
+                Color theme
+                <ArrowRight />
+              </button>
               {ITEMS.filter((item) =>
                 item.label.toLowerCase().includes(search.toLowerCase()),
               ).map(({ id, label, icon: Icon }) => (

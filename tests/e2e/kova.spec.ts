@@ -151,7 +151,9 @@ test("agent graph supports additions, validation, persistence, and removal", asy
   await page.getByRole("button", { name: "Save workflow" }).click();
   await page.reload();
   await expect(page.locator(".react-flow__node")).toHaveCount(7);
-  await page.getByLabel("Selected node", { exact: true }).selectOption({ label: "Review assistant" });
+  await page
+    .getByLabel("Selected node", { exact: true })
+    .selectOption({ label: "Review assistant" });
   await page.getByRole("button", { name: "Remove node", exact: true }).click();
   await expect(page.locator(".react-flow__node")).toHaveCount(6);
 });
@@ -261,4 +263,80 @@ test("screens remain usable without horizontal page overflow", async ({
     });
   }
   expect(errors).toEqual([]);
+});
+test("IDE themes and custom colors persist across navigation and reload", async ({
+  page,
+}, info) => {
+  await page
+    .getByRole("button", { name: "Choose color theme", exact: true })
+    .click();
+  await page.getByRole("button", { name: "GitHub Dark", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-preset",
+    "github-dark",
+  );
+  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Open RelayDesk", exact: true })
+    .click();
+  await expect(
+    page.getByRole("contentinfo", { name: "Workspace status" }),
+  ).toContainText("GitHub Dark");
+  await page
+    .getByRole("button", { name: "Choose color theme", exact: true })
+    .click();
+  await page
+    .getByLabel("Status bar color", { exact: true })
+    .evaluate((element) => {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )!.set!;
+      setter.call(element, "#654321");
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  await expect(
+    page.getByRole("contentinfo", { name: "Workspace status" }),
+  ).toHaveCSS("background-color", "rgb(101, 67, 33)");
+  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await page.reload();
+  await expect(
+    page.getByRole("contentinfo", { name: "Workspace status" }),
+  ).toHaveCSS("background-color", "rgb(101, 67, 33)");
+  await page
+    .getByRole("button", { name: "Choose color theme", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Reset colors", exact: true }).click();
+  await expect(
+    page.getByRole("contentinfo", { name: "Workspace status" }),
+  ).toHaveCSS("background-color", "rgb(22, 27, 34)");
+  await page.getByRole("button", { name: "Code Light", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(
+    page.getByRole("button", { name: "Code Light", exact: true }),
+  ).toHaveCSS("background-color", "rgb(243, 243, 243)");
+  await page.getByRole("dialog").evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await page.screenshot({
+    path: `artifacts/themes/${info.project.name}-theme-picker.png`,
+    scale: "css",
+    animations: "disabled",
+  });
+  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Open branch settings", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Every change, accounted for." }),
+  ).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-preset",
+    "code-light",
+  );
+  const overflow = await page
+    .locator("body")
+    .evaluate((element) => element.scrollWidth > innerWidth);
+  expect(overflow).toBe(false);
 });

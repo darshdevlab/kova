@@ -48,7 +48,7 @@ try {
       await page.goto(`${base}/workspace/relaydesk?view=plan`);
       await page.locator(".workspace-main.view-plan").waitFor();
       await page.screenshot({ path: `${output}/desktop-silver.png` });
-      await page.evaluate(() => localStorage.setItem("kova:theme:v2", "dark"));
+      await page.evaluate(() => { localStorage.removeItem("kova:appearance:v3"); localStorage.setItem("kova:theme:v2", "dark"); });
       await page.goto(`${base}/design-system`);
       await page.screenshot({ path: `${output}/design-system-v2.png`, fullPage: true });
     }

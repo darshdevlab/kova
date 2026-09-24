@@ -32,6 +32,7 @@ import {
 import { Modal, NextStep, SurfaceHeader } from "@/components/ui";
 import { downloadFile, useWorkspace } from "@/lib/workspace-state";
 import dynamic from "next/dynamic";
+import { ThemePicker } from "@/components/theme-picker";
 
 export const AgentsSurface = dynamic(
   () => import("./agent-flow").then((module) => module.AgentFlow),
@@ -1242,9 +1243,6 @@ export function SettingsSurface() {
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState("Editor");
   const [invite, setInvite] = useState(false);
-  const [theme, setTheme] = useState(
-    () => document.documentElement.dataset.theme || "dark",
-  );
   const [envName, setEnvName] = useState("");
   const [mockValue, setMockValue] = useState("");
   const [envs, setEnvs] = useState<Record<string, string>>(() => {
@@ -1478,32 +1476,7 @@ export function SettingsSurface() {
               ))}
             </>
           )}
-          {tab === "Appearance" && (
-            <>
-              <p className="muted">Choose your workspace appearance.</p>
-              <div className="theme-options">
-                {["dark", "light"].map((value) => (
-                  <button
-                    key={value}
-                    className={`theme-option ${value} ${theme === value ? "selected" : ""}`}
-                    onClick={() => {
-                      setTheme(value);
-                      document.documentElement.dataset.theme = value;
-                      localStorage.setItem("kova:theme:v2", value);
-                    }}
-                  >
-                    <span className="theme-sample">
-                      <i />
-                      <i />
-                      <i />
-                    </span>
-                    <strong>{value === "dark" ? "Graphite" : "Silver"}</strong>
-                    {theme === value && <Check />}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+          {tab === "Appearance" && <ThemePicker />}
         </section>
       </div>
       {connection && (

@@ -12,15 +12,15 @@ import {
   GitBranch,
   LayoutTemplate,
   LogOut,
-  Moon,
   MoreHorizontal,
+  Palette,
   Plus,
   Search,
   Sparkles,
-  Sun,
 } from "lucide-react";
 import { BrandMark } from "./brand-mark";
 import { Modal } from "./ui";
+import { ThemePicker } from "./theme-picker";
 import { clearSession, readProjects, writeProjects } from "@/lib/storage";
 import { initialWorkspace } from "@/lib/workspace-state";
 import type { KovaProject } from "@/lib/types";
@@ -64,7 +64,7 @@ export function ProjectHub() {
   const [name, setName] = useState("");
   const [brief, setBrief] = useState("");
   const [url, setUrl] = useState("");
-  const [theme, setTheme] = useState("dark");
+  const [showTheme, setShowTheme] = useState(false);
   const [actions, setActions] = useState<KovaProject | null>(null);
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -74,9 +74,6 @@ export function ProjectHub() {
       } catch {
         setArchived([]);
       }
-      const saved = localStorage.getItem("kova:theme:v2") || "dark";
-      setTheme(saved);
-      document.documentElement.dataset.theme = saved;
     }, 0);
     return () => clearTimeout(timer);
   }, []);
@@ -147,16 +144,11 @@ export function ProjectHub() {
           <span className="tag">Personal workspace</span>
           <button
             className="icon-button ghost"
-            title="Toggle theme"
-            aria-label="Toggle theme"
-            onClick={() => {
-              const next = theme === "dark" ? "light" : "dark";
-              setTheme(next);
-              document.documentElement.dataset.theme = next;
-              localStorage.setItem("kova:theme:v2", next);
-            }}
+            title="Choose color theme"
+            aria-label="Choose color theme"
+            onClick={() => setShowTheme(true)}
           >
-            {theme === "dark" ? <Sun /> : <Moon />}
+            <Palette />
           </button>
           <button
             className="icon-button ghost"
@@ -367,6 +359,11 @@ export function ProjectHub() {
           </div>
         </section>
       </main>
+      {showTheme && (
+        <Modal title="Color theme" close={() => setShowTheme(false)}>
+          <ThemePicker />
+        </Modal>
+      )}
       {showCreate && (
         <Modal
           title="Where would you like to start?"

@@ -64,6 +64,15 @@ Silver mode is defined by the same semantic tokens in `src/app/globals.css`. The
 - The sample preview does not imply arbitrary code generation.
 - Consult `FEATURE-COVERAGE.md` for every planned capability's current boundary.
 
-## Verification
+## IDE Appearance
+
+- Graphite remains the default. Silver, Code Dark/Light, and GitHub Dark/Light are optional presets; Code and GitHub palettes are inspired interpretations, not exact reproductions.
+- Access themes from the project hub, Settings > Appearance, the command palette, or the bottom-right theme shortcut.
+- Accent, editor background, sidebar, and status bar colors can be customized independently. Reset colors restores the selected preset; switching presets clears overrides.
+- Preferences persist locally across navigation and reloads, and synchronize between tabs. They are not account-synced.
+- The desktop status bar is 28px high; mobile uses 27px above its navigation. It shows the configured branch, configuration-check status, local version, and theme. Less essential details hide on mobile.
+- Branch and verification shortcuts open their respective screens. These indicators describe local project configuration, not a live Git checkout or remote CI status.
+
+## Verification Coverage
 
 Playwright covers connected local journeys and desktop/mobile screen reachability, persistence, failure recovery, graph operations, and horizontal overflow. Screenshots are stored under `artifacts/redesign/`. These checks do not constitute complete accessibility certification or complete coverage of the 338-feature backlog.
