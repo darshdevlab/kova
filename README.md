@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Kova
 
-## Getting Started
+Kova is an Architect 2.0 product prototype for both non-technical builders and developers. It keeps intent, implementation, verification, source control, and release evidence in one workspace.
 
-First, run the development server:
+## Product flows
+
+- Authentication with Supabase-ready email access and a credential-free demo workspace
+- Prompt-first project creation, repository import, templates, and work-item context
+- Guided and Developer workspace depths without splitting the product into two tools
+- Build chat with live OpenRouter model discovery, manual model selection, and automatic routing
+- Interactive app preview, code explorer, and Context Lens for selecting an exact UI element
+- Living PRD, architecture, personas, acceptance criteria, and decision history
+- Visual agent workflow with model, tool, knowledge, and guardrail configuration
+- Managed data, row-level security, and authentication design surfaces
+- Requirement-linked browser, API, accessibility, and agent evaluation evidence
+- Git diff, branch policy, reviewer readiness, and pull-request flow
+- Preview, staging, production, rollback, environment, and release-health flow
+- Activity timeline and bring-your-own-model provider settings
+
+## Run locally
 
 ```bash
+npm install
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). Without environment variables, Kova runs in a deterministic demo mode and every major product flow remains usable.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+OPENROUTER_API_KEY=
+OPENROUTER_DEFAULT_MODEL=openai/gpt-6-sol
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+```
 
-## Learn More
+`OPENROUTER_API_KEY` is only read in the server route. Provider keys never reach the browser. Apply [`supabase/schema.sql`](./supabase/schema.sql) to a dedicated Supabase project before enabling persistent accounts and project data.
 
-To learn more about Next.js, take a look at the following resources:
+## Quality checks
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run typecheck
+npm run lint
+npm run build
+npm run test:e2e
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Playwright covers authentication, project entry, prompt execution, Context Lens, agent workflow, tests, pull-request creation, deployment, and mobile navigation.
 
-## Deploy on Vercel
+## Stack
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Next.js 16 App Router and React 19
+- TypeScript and Zod
+- Supabase Auth/Postgres readiness with RLS-first schema
+- OpenRouter model catalog and server-side chat route
+- Lucide icons and the Kova design system
+- Playwright end-to-end verification
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Design system
+
+Kova uses a compact workbench language built around Deep Ink (`#171A1F`), Kova Ember (`#F1543F`), Action Blue (`#2F6FED`), and Canvas (`#F6F7F9`). Geist and Geist Mono provide the typography. Surfaces use 4-8px radii, restrained shadows, visible state, and progressive disclosure so the same product remains approachable in Guided mode and precise in Developer mode.
