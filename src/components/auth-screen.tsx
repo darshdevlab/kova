@@ -17,14 +17,31 @@ import {
 } from "@/lib/supabase/client";
 import { writeSession } from "@/lib/storage";
 
-export function AuthScreen() {
+export function AuthScreen({ initialError = "" }: { initialError?: string }) {
   const router = useRouter();
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(initialError);
   const configured = isSupabaseConfigured();
+
+  async function signInWithGoogle() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const client = getSupabaseBrowserClient();
+      if (!client) throw new Error("Google sign-in is not configured yet.");
+      const { error } = await client.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}/auth/callback` },
+      });
+      if (error) throw error;
+    } catch {
+      setMessage("Unable to start Google sign-in. Please try again.");
+      setBusy(false);
+    }
+  }
 
   function enterDemo() {
     writeSession({ email: "darsh@example.com", name: "Darsh", mode: "demo" });
@@ -152,6 +169,17 @@ export function AuthScreen() {
               Create account
             </button>
           </div>
+
+          {configured && (
+            <button
+              className="button secondary wide"
+              type="button"
+              disabled={busy}
+              onClick={signInWithGoogle}
+            >
+              Continue with Google
+            </button>
+          )}
 
           <button
             className="button secondary wide"

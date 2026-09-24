@@ -22,6 +22,7 @@ import { BrandMark } from "./brand-mark";
 import { Modal } from "./ui";
 import { ThemePicker } from "./theme-picker";
 import { clearSession, readProjects, writeProjects } from "@/lib/storage";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { initialWorkspace } from "@/lib/workspace-state";
 import type { KovaProject } from "@/lib/types";
 
@@ -154,7 +155,12 @@ export function ProjectHub() {
             className="icon-button ghost"
             title="Sign out"
             aria-label="Sign out"
-            onClick={() => {
+            onClick={async () => {
+              const client = getSupabaseBrowserClient();
+              if (client) {
+                const { error } = await client.auth.signOut();
+                if (error) return;
+              }
               clearSession();
               router.push("/");
             }}
