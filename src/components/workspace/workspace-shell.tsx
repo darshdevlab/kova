@@ -31,6 +31,7 @@ import { Modal } from "@/components/ui";
 import { ThemePicker } from "@/components/theme-picker";
 import { useTheme } from "@/lib/theme";
 import { readProjects, writeProjects } from "@/lib/storage";
+import { database, saveRecord, type PlatformRecord } from "@/lib/platform";
 import {
   downloadFile,
   initialWorkspace,
@@ -81,21 +82,72 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
   const [share, setShare] = useState(false);
   const [toast, setToast] = useState("");
   const [showTheme, setShowTheme] = useState(false);
+  const [cloudRecord, setCloudRecord] = useState<PlatformRecord | null>(null);
+  const [cloudError, setCloudError] = useState("");
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
   const { preset, settings: appearance } = useTheme();
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const found = readProjects().find((item) => item.id === projectId);
+    const timer = setTimeout(async () => {
+      let found: KovaProject | undefined;
+      let remote: PlatformRecord | null = null;
+      try {
+        const db = database();
+        const { data: user } = await db.auth.getUser();
+        if (!user.user) {
+          router.replace("/");
+          return;
+        }
+        const { data, error } = await db
+          .from("kova_records")
+          .select("*")
+          .eq("id", projectId)
+          .eq("kind", "project")
+          .maybeSingle();
+        if (error || !data) {
+          setCloudError("Project unavailable or access denied.");
+          return;
+        }
+        remote = data as PlatformRecord;
+        setCloudRecord(remote);
+        const membership = await db
+          .from("kova_members")
+          .select("role")
+          .eq("space_id", remote.space_id)
+          .eq("user_id", user.user.id)
+          .single();
+        setReadOnly(!membership.data || membership.data.role === "Viewer");
+        found = {
+          id: remote.id,
+          name: remote.data.title,
+          description: remote.data.description || "",
+          source: (remote.data.source as KovaProject["source"]) || "Prompt",
+          status: "Draft",
+          updatedAt: remote.updated_at,
+          mode: "Developer",
+          accent: "green",
+          progress: 0,
+        };
+      } catch {
+        setCloudError(
+          "Could not load this project. Please return to projects and retry.",
+        );
+        return;
+      }
       if (!found) {
         router.replace("/projects");
         return;
       }
       setProject(found);
       let saved = initialWorkspace(found);
+      if (remote?.data.workspace) saved = remote.data.workspace;
       try {
-        const raw = localStorage.getItem(`kova:workspace:v2:${projectId}`);
+        const raw = remote
+          ? null
+          : localStorage.getItem(`kova:workspace:v2:${projectId}`);
         if (raw) saved = { ...saved, ...JSON.parse(raw) };
       } catch {
         /* Keep the initial project if a saved draft is malformed. */
@@ -107,13 +159,6 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
     }, 0);
     return () => clearTimeout(timer);
   }, [projectId, router]);
-  useEffect(() => {
-    if (state)
-      localStorage.setItem(
-        `kova:workspace:v2:${projectId}`,
-        JSON.stringify(state),
-      );
-  }, [state, projectId]);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "k") {
@@ -130,6 +175,7 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
   const update = useCallback(
     (patch: Partial<WorkspaceState>) =>
       setState((current) => {
+        if (readOnly) return current;
         if (!current) return current;
         const affectsVerification = [
           "brief",
@@ -152,7 +198,7 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
           ...patch,
         };
       }),
-    [],
+    [readOnly],
   );
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -194,6 +240,19 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
       ),
     );
   }
+  if (cloudError && !project)
+    return (
+      <div className="platform-loading">
+        <BrandMark />
+        <p role="alert">{cloudError}</p>
+        <button
+          className="button primary"
+          onClick={() => router.push("/projects")}
+        >
+          Back to projects
+        </button>
+      </div>
+    );
   if (!project || !state)
     return (
       <div className="workspace-loading">
@@ -263,6 +322,32 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
             <span className="tag">Private</span>
           </div>
           <div className="workspace-top-actions">
+            <button
+              className="button secondary compact"
+              disabled={cloudBusy || readOnly}
+              onClick={async () => {
+                if (!cloudRecord) return;
+                setCloudBusy(true);
+                try {
+                  const saved = await saveRecord(
+                    cloudRecord.space_id,
+                    "project",
+                    { ...cloudRecord.data, workspace: state },
+                    cloudRecord,
+                  );
+                  setCloudRecord(saved);
+                  notify("Project saved to cloud");
+                } catch {
+                  notify(
+                    "Save failed or another member edited this project. Export a snapshot before refreshing.",
+                  );
+                } finally {
+                  setCloudBusy(false);
+                }
+              }}
+            >
+              {cloudBusy ? "Saving..." : "Save project"}
+            </button>
             <div className="mode-segment" aria-label="Workspace depth">
               {(["Guided", "Developer"] as const).map((mode) => (
                 <button
@@ -306,7 +391,8 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
           >
             <span className="avatar">D</span>
             <span>
-              Personal workspace<small>Local prototype</small>
+              Project workspace
+              <small>{readOnly ? "Read-only" : "Cloud project"}</small>
             </span>
             <ChevronDown />
           </button>
@@ -335,7 +421,8 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
           <div className="workspace-sidebar-footer">
             <span className="status-dot" />
             <span>
-              All changes saved<small>On this device</small>
+              {readOnly ? "Read-only access" : "Save to sync changes"}
+              <small>Supabase workspace</small>
             </span>
           </div>
         </aside>
@@ -359,7 +446,15 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
           </span>
         </div>
         <main className={`workspace-main view-${view}`} key={view}>
-          {renderView()}
+          {readOnly ? (
+            <div className="platform-empty">
+              <h2>Read-only project</h2>
+              <p>{state.brief}</p>
+              <p>Ask a workspace administrator for editing access.</p>
+            </div>
+          ) : (
+            renderView()
+          )}
         </main>
         <footer className="ide-statusbar" aria-label="Workspace status">
           <div className="statusbar-left">
@@ -387,7 +482,9 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
             </button>
           </div>
           <div className="statusbar-right">
-            <span className="statusbar-local">Local workspace</span>
+            <span className="statusbar-local">
+              Cloud project / explicit save
+            </span>
             <span className="statusbar-version">v{state.version}</span>
             <button
               type="button"
@@ -488,8 +585,8 @@ export function WorkspaceShell({ projectId }: { projectId: string }) {
         {share && (
           <Modal title="Share workspace" close={() => setShare(false)}>
             <p className="muted">
-              This project is stored on this device. Export a snapshot to share
-              its brief, configuration, and review history.
+              Export a snapshot to share its brief, configuration, and review
+              history.
             </p>
             <button
               className="button primary wide"

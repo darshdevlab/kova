@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Check,
-  GitFork,
   LoaderCircle,
   LockKeyhole,
   Sparkles,
@@ -22,6 +21,8 @@ export function AuthScreen({ initialError = "" }: { initialError?: string }) {
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(initialError);
   const configured = isSupabaseConfigured();
@@ -43,57 +44,69 @@ export function AuthScreen({ initialError = "" }: { initialError?: string }) {
     }
   }
 
-  function enterDemo() {
-    writeSession({ email: "darsh@example.com", name: "Darsh", mode: "demo" });
-    router.push("/projects");
-  }
-
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
     if (!configured) {
-      setMessage(
-        "Account authentication is not connected yet. Use the demo workspace to explore Kova.",
-      );
+      setMessage("Authentication is unavailable. Please try again later.");
       return;
     }
 
+    if (authMode === "signup" && password !== confirmation) {
+      setMessage("Passwords do not match.");
+      return;
+    }
     setBusy(true);
-    const supabase = getSupabaseBrowserClient();
-    const result =
-      authMode === "signin"
-        ? await supabase!.auth.signInWithPassword({ email, password })
-        : await supabase!.auth.signUp({ email, password });
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const result =
+        authMode === "signin"
+          ? await supabase!.auth.signInWithPassword({ email, password })
+          : await supabase!.auth.signUp({
+              email,
+              password,
+              options: {
+                data: { full_name: name.trim() },
+                emailRedirectTo: `${location.origin}/auth/callback`,
+              },
+            });
 
-    if (result.error) {
-      setMessage(result.error.message);
+      if (result.error) {
+        setMessage(result.error.message);
+        setBusy(false);
+        return;
+      }
+
+      if (authMode === "signup" && !result.data.session) {
+        setMessage("Check your inbox to confirm the new account.");
+        setBusy(false);
+        return;
+      }
+
+      writeSession({
+        email,
+        name:
+          result.data.user?.user_metadata.full_name ||
+          name ||
+          email.split("@")[0],
+        mode: "supabase",
+      });
+      router.push("/projects");
+    } catch {
+      setMessage("Unable to connect. Please try again.");
+    } finally {
       setBusy(false);
-      return;
     }
-
-    if (authMode === "signup" && !result.data.session) {
-      setMessage("Check your inbox to confirm the new account.");
-      setBusy(false);
-      return;
-    }
-
-    writeSession({ email, name: email.split("@")[0], mode: "supabase" });
-    router.push("/projects");
   }
 
   return (
     <main className="auth-shell">
       <section className="auth-story" aria-labelledby="auth-title">
-        <BrandMark context="Architect 2.0" />
+        <BrandMark />
         <div className="auth-story-copy">
           <span className="eyebrow">One shared product workspace</span>
-          <h1 id="auth-title">
-            From an idea to production, without losing control.
-          </h1>
-          <p>
-            Plan with stakeholders, build with agents, inspect the code, verify
-            the result and ship from one traceable project.
-          </p>
+          <h1 id="auth-title">A little intention. A world of possibility.</h1>
+          <p>Your projects, your team, your next chapter.</p>
         </div>
 
         <div className="auth-workflow" aria-label="Kova product lifecycle">
@@ -110,7 +123,7 @@ export function AuthScreen({ initialError = "" }: { initialError?: string }) {
           ))}
         </div>
 
-        <div className="auth-evidence">
+        <div className="auth-evidence" hidden>
           <div className="evidence-status">
             <span />
             Last build verified
@@ -137,9 +150,7 @@ export function AuthScreen({ initialError = "" }: { initialError?: string }) {
             </span>
             <div>
               <h2>
-                {authMode === "signin"
-                  ? "Welcome back"
-                  : "Create your workspace"}
+                {authMode === "signin" ? "Welcome back" : "Create your account"}
               </h2>
               <p>
                 {authMode === "signin"
@@ -181,19 +192,23 @@ export function AuthScreen({ initialError = "" }: { initialError?: string }) {
             </button>
           )}
 
-          <button
-            className="button secondary wide"
-            type="button"
-            onClick={enterDemo}
-          >
-            <GitFork aria-hidden="true" /> Continue with demo workspace
-          </button>
-
           <div className="auth-divider">
             <span>or use email</span>
           </div>
 
           <form onSubmit={submit} className="auth-form">
+            {authMode === "signup" && (
+              <label className="field">
+                <span>Full name</span>
+                <input
+                  autoComplete="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  maxLength={80}
+                />
+              </label>
+            )}
             <label className="field">
               <span>Work email</span>
               <input
@@ -217,6 +232,54 @@ export function AuthScreen({ initialError = "" }: { initialError?: string }) {
                 required
               />
             </label>
+            {authMode === "signup" && (
+              <label className="field">
+                <span>Confirm password</span>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmation}
+                  onChange={(e) => setConfirmation(e.target.value)}
+                  minLength={8}
+                  required
+                />
+              </label>
+            )}
+            {authMode === "signin" && (
+              <button
+                className="text-action"
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  if (!email) {
+                    setMessage("Enter your email address first.");
+                    return;
+                  }
+                  setBusy(true);
+                  try {
+                    const client = getSupabaseBrowserClient();
+                    if (!client) throw Error();
+                    const { error } = await client.auth.resetPasswordForEmail(
+                      email,
+                      { redirectTo: `${location.origin}/auth/callback` },
+                    );
+                    setMessage(
+                      error
+                        ? error.message
+                        : "If your account exists, a recovery email is on its way. Update your password in Settings after signing in.",
+                    );
+                  } catch {
+                    setMessage(
+                      "Recovery email could not be sent. Please retry.",
+                    );
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Forgot password?
+              </button>
+            )}
             {message ? (
               <p className="form-message" role="status">
                 {message}
@@ -230,7 +293,7 @@ export function AuthScreen({ initialError = "" }: { initialError?: string }) {
               {busy ? (
                 <LoaderCircle className="spin" aria-hidden="true" />
               ) : null}
-              {authMode === "signin" ? "Continue to Kova" : "Create workspace"}
+              {authMode === "signin" ? "Continue to Kova" : "Create account"}
               {busy ? null : <ArrowRight aria-hidden="true" />}
             </button>
           </form>
@@ -239,8 +302,8 @@ export function AuthScreen({ initialError = "" }: { initialError?: string }) {
             <LockKeyhole aria-hidden="true" />
             <span>
               {configured
-                ? "Supabase authentication connected"
-                : "Demo mode active · Supabase ready"}
+                ? "Your private workspace"
+                : "Authentication unavailable"}
             </span>
           </div>
         </div>

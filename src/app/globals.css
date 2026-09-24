@@ -1,6 +1,7 @@
 @import "../styles/workspace.css";
 @import "../styles/surfaces.css";
 @import "../styles/appearance.css";
+@import "../styles/platform.css";
 
 :root {
   color-scheme: dark;

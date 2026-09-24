@@ -1,6 +1,6 @@
 # Kova
 
-An Architect 2.0 assignment prototype for guided application building and developer workflows. The current revision redesigns the application around Graphite/Jade, a shared project lifecycle, and persistent local interactions.
+A guided application-building workspace for individuals and companies. Kova combines a Graphite/Jade interface, cloud-backed project planning, a developer editor, and simulated delivery Bot workflows.
 
 ## Run
 
@@ -11,7 +11,11 @@ npm run dev -- --hostname 127.0.0.1 --port 3100
 
 - Application: http://127.0.0.1:3100
 - Current design system: http://127.0.0.1:3100/design-system
-- Enter through **Continue with demo workspace** when authentication is not configured.
+- Sign in with a configured Supabase account. There is no demo-login bypass.
+
+## Current delivery
+
+Read [delivery status](docs/DELIVERY-STATUS.md) for the verified scope and remaining work. Cloud-backed personal/company workspaces, project briefs and approvals, private Bot URLs, membership controls, simulated credit purchases, and explicit editor saves are implemented. The earlier audit below describes the previous prototype, not a current completion count.
 
 ## What works locally
 
@@ -32,13 +36,13 @@ npm run dev -- --hostname 127.0.0.1 --port 3100
 
 This is not a completed production platform. The [338-entry implementation audit](docs/FEATURE-COVERAGE.md) records working local, partial, and pending capabilities individually. A visible flow is not proof that its external service is implemented.
 
-Repository cloning, isolated command execution, generated applications, external tests, real PR creation, hosting deployment, live collaboration, encrypted provider-key management, and most inherited integrations remain pending. The preview is a sample application. Local configuration checks do not run repository tests. A local release snapshot does not deploy anything.
+Repository cloning, isolated command execution, external tests, real PR creation, user-app deployment, live collaboration, encrypted provider-key management, and most inherited integrations remain pending. The editor can request a self-contained HTML preview from OpenRouter; it is not a generated full-stack repository. Local configuration checks do not run repository tests. A release snapshot does not deploy anything.
 
-The existing Supabase email adapter requires a configured project and live verification. The OpenRouter route can request model text with a server key, but it has no file-editing, test-running, or deployment tools. The model must not claim these actions.
+The OpenRouter endpoint verifies authentication and workspace membership, requires an explicit account allowlist, and reserves one of ten daily requests before inference. It has no repository-editing, test-running, or deployment tools. The model must not claim these actions. Simulated credits cannot increase real usage limits.
 
 ```dotenv
 OPENROUTER_API_KEY=
-OPENROUTER_DEFAULT_MODEL=
+KOVA_AI_ALLOWED_EMAILS=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ```

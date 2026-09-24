@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { platformFixture, PROJECT_ID } from "./platform-fixture";
 
 async function navigate(page: Page, view: string) {
   await expect(page.locator(".workspace-shell")).toBeVisible();
@@ -18,6 +19,7 @@ async function navigate(page: Page, view: string) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await platformFixture(page);
   await page.route("**/api/models", (route) =>
     route.fulfill({
       json: {
@@ -40,26 +42,22 @@ test.beforeEach(async ({ page }) => {
       },
     }),
   );
-  await page.goto("/");
-  await page
-    .getByRole("button", { name: "Continue with demo workspace" })
-    .click();
+  await page.goto("/projects");
   await expect(page).toHaveURL(/\/projects$/);
 });
 
 test("creates a project and moves through a persistent gated release journey", async ({
   page,
 }) => {
-  await page.getByRole("button", { name: "New project", exact: true }).click();
-  await page.getByLabel("Project name", { exact: true }).fill("Research desk");
-  await page
-    .getByLabel("What are we building?", { exact: true })
-    .fill("Track research tasks with clear approvals and ownership.");
-  await page.getByRole("button", { name: "Create project & plan" }).click();
+  await page.goto(`/workspace/${PROJECT_ID}?view=plan`);
   await expect(
     page.getByRole("heading", { name: "A clear plan. A better build." }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Approve plan", exact: true }).click();
+  const approval = page.getByRole("button", {
+    name: "Approve plan",
+    exact: true,
+  });
+  if (await approval.isVisible()) await approval.click();
   await page.getByRole("button", { name: "Continue to build" }).click();
   await expect(
     page.getByText("Build with Kova", { exact: true }),
@@ -86,6 +84,8 @@ test("creates a project and moves through a persistent gated release journey", a
   await expect(
     page.getByRole("heading", { name: "Version 1 is packaged" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  await expect(page.locator(".toast")).toContainText("saved to cloud");
   await page.reload();
   await expect(
     page.getByRole("heading", { name: "Version 1 is packaged" }),
@@ -98,9 +98,7 @@ test("creates a project and moves through a persistent gated release journey", a
 });
 
 test("data edits persist and invalidate old verification", async ({ page }) => {
-  await page
-    .getByRole("button", { name: "Open RelayDesk", exact: true })
-    .click();
+  await page.goto(`/workspace/${PROJECT_ID}`);
   await navigate(page, "Tests");
   await page.getByRole("button", { name: "Run all checks" }).click();
   await navigate(page, "Data & auth");
@@ -119,6 +117,8 @@ test("data edits persist and invalidate old verification", async ({ page }) => {
   await expect(
     page.getByRole("cell", { name: "First milestone", exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  await expect(page.locator(".toast")).toContainText("saved to cloud");
   await page.reload();
   await page
     .locator(".table-list")
@@ -136,9 +136,7 @@ test("data edits persist and invalidate old verification", async ({ page }) => {
 test("agent graph supports additions, validation, persistence, and removal", async ({
   page,
 }) => {
-  await page
-    .getByRole("button", { name: "Open RelayDesk", exact: true })
-    .click();
+  await page.goto(`/workspace/${PROJECT_ID}`);
   await navigate(page, "Agents");
   await expect(page.locator(".react-flow__node")).toHaveCount(6);
   await page.getByRole("button", { name: "Add node", exact: true }).click();
@@ -149,6 +147,8 @@ test("agent graph supports additions, validation, persistence, and removal", asy
     "1 disconnected node(s): Review assistant",
   );
   await page.getByRole("button", { name: "Save workflow" }).click();
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  await expect(page.locator(".toast")).toContainText("saved to cloud");
   await page.reload();
   await expect(page.locator(".react-flow__node")).toHaveCount(7);
   await page
@@ -161,9 +161,7 @@ test("agent graph supports additions, validation, persistence, and removal", asy
 test("prompt drafts, model selection, context lens, and failure recovery", async ({
   page,
 }, info) => {
-  await page
-    .getByRole("button", { name: "Open RelayDesk", exact: true })
-    .click();
+  await page.goto(`/workspace/${PROJECT_ID}`);
   if (info.project.name === "mobile")
     await page
       .getByRole("button", { name: "Conversation", exact: true })
@@ -209,6 +207,10 @@ test("prompt drafts, model selection, context lens, and failure recovery", async
       .locator(".mobile-build-tabs")
       .getByRole("button", { name: "Preview", exact: true })
       .click();
+  await page
+    .locator(".canvas-tabs")
+    .getByRole("button", { name: "Preview", exact: true })
+    .click();
   await page.getByText("AI triage is active", { exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText(
     "AI triage queue banner",
@@ -226,9 +228,7 @@ test("screens remain usable without horizontal page overflow", async ({
 }, info) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page
-    .getByRole("button", { name: "Open RelayDesk", exact: true })
-    .click();
+  await page.goto(`/workspace/${PROJECT_ID}`);
   for (const view of [
     "Build",
     "Plan",
@@ -276,9 +276,7 @@ test("IDE themes and custom colors persist across navigation and reload", async 
     "github-dark",
   );
   await page.getByRole("button", { name: "Close dialog", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Open RelayDesk", exact: true })
-    .click();
+  await page.goto(`/workspace/${PROJECT_ID}`);
   await expect(
     page.getByRole("contentinfo", { name: "Workspace status" }),
   ).toContainText("GitHub Dark");
@@ -300,6 +298,8 @@ test("IDE themes and custom colors persist across navigation and reload", async 
     page.getByRole("contentinfo", { name: "Workspace status" }),
   ).toHaveCSS("background-color", "rgb(101, 67, 33)");
   await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  await expect(page.locator(".toast")).toContainText("saved to cloud");
   await page.reload();
   await expect(
     page.getByRole("contentinfo", { name: "Workspace status" }),

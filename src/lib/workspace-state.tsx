@@ -39,6 +39,8 @@ export type WorkspaceState = {
   requirements: string[];
   context: string[];
   sourceCode: string;
+  previewHtml?: string;
+  previousPreviewHtml?: string;
 };
 
 export function initialWorkspace(project: KovaProject): WorkspaceState {

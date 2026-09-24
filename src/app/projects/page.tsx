@@ -1,5 +1,5 @@
-import { ProjectHub } from "@/components/project-hub";
+import { Platform } from "@/components/platform/platform";
 
 export default function ProjectsPage() {
-  return <ProjectHub />;
+  return <Platform />;
 }

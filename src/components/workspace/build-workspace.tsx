@@ -72,7 +72,10 @@ export function BuildWorkspace({ project }: { project: KovaProject }) {
   }, [state.messages.length, running]);
   const selectedModel =
     models.find((item) => item.id === state.model) || FALLBACK_MODELS[0];
-  async function send(value = state.draft.trim()) {
+  async function send(
+    value = state.draft.trim(),
+    task: "chat" | "ui" = "chat",
+  ) {
     if (!value || running) return;
     const nextMessages = [
       ...state.messages,
@@ -97,6 +100,8 @@ export function BuildWorkspace({ project }: { project: KovaProject }) {
           model: state.model,
           mode: project.mode,
           projectName: project.name,
+          projectId: project.id,
+          task,
         }),
       });
       const result = await response.json();
@@ -104,6 +109,13 @@ export function BuildWorkspace({ project }: { project: KovaProject }) {
         throw new Error(result.error || "The model request failed");
       if (controller.signal.aborted) return;
       update({
+        ...(result.html
+          ? {
+              previewHtml: result.html,
+              previousPreviewHtml: state.previewHtml,
+              sourceCode: result.html,
+            }
+          : {}),
         messages: [
           ...nextMessages,
           {
@@ -113,7 +125,7 @@ export function BuildWorkspace({ project }: { project: KovaProject }) {
             meta:
               result.funding === "Demo"
                 ? "Local prototype response / no repository changes"
-                : `${result.model} / AI response only`,
+                : `${result.model} / ${result.html ? "Generated HTML prototype" : "AI response only"}`,
           },
         ],
         version: state.version + 1,
@@ -126,6 +138,7 @@ export function BuildWorkspace({ project }: { project: KovaProject }) {
         "Build",
       );
       setAttachments([]);
+      if (result.html) setTab("preview");
     } catch (error) {
       update({ draft: value });
       if ((error as Error).name !== "AbortError")
@@ -286,7 +299,19 @@ export function BuildWorkspace({ project }: { project: KovaProject }) {
               <AtSign />
               {state.context.length} context sources
             </button>
-            <span>Saved</span>
+            <button
+              disabled={running}
+              onClick={() =>
+                void send(
+                  state.draft.trim() ||
+                    `Build a responsive HTML prototype for: ${state.brief}`,
+                  "ui",
+                )
+              }
+            >
+              <Sparkles />
+              Generate UI
+            </button>
           </div>
           <div className="composer">
             {attachments.length > 0 && (
@@ -385,7 +410,7 @@ export function BuildWorkspace({ project }: { project: KovaProject }) {
           </div>
           <div className="composer-footnote">
             <span className="status-dot" />
-            Local prototype<span>Changes stay on this device</span>
+            Cloud project<span>Save project to sync editor changes</span>
           </div>
         </div>
       </section>
@@ -450,14 +475,32 @@ export function BuildWorkspace({ project }: { project: KovaProject }) {
               <span>
                 {project.name.toLowerCase().replaceAll(" ", "-")}.preview
               </span>
-              <span className="tag">Sample app</span>
+              <span className="tag">
+                {state.previewHtml ? "Generated HTML" : "Sample app"}
+              </span>
             </div>
             <div className={`preview-frame ${device}`}>
-              <ProductPreview
-                key={previewKey}
-                version={state.version}
-                onSelect={setSelection}
-              />
+              {state.previewHtml ? (
+                <iframe
+                  title="Generated application preview"
+                  sandbox="allow-scripts"
+                  referrerPolicy="no-referrer"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    minHeight: 500,
+                    border: 0,
+                    background: "white",
+                  }}
+                  srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none';">${state.previewHtml}`}
+                />
+              ) : (
+                <ProductPreview
+                  key={previewKey}
+                  version={state.version}
+                  onSelect={setSelection}
+                />
+              )}
             </div>
             <div className="preview-status">
               <span>
@@ -482,11 +525,16 @@ export function BuildWorkspace({ project }: { project: KovaProject }) {
             <header>
               <span>
                 <FileCode2 />
-                app/page.tsx
+                {state.previewHtml ? "index.html" : "app/page.tsx"}
               </span>
               <button
                 className="text-button"
-                onClick={() => downloadFile("page.tsx", state.sourceCode)}
+                onClick={() =>
+                  downloadFile(
+                    state.previewHtml ? "index.html" : "page.tsx",
+                    state.sourceCode,
+                  )
+                }
               >
                 <Download />
                 Export
@@ -505,8 +553,38 @@ export function BuildWorkspace({ project }: { project: KovaProject }) {
               }
             />
             <footer>
-              <span>Local draft / not connected to preview</span>
-              <span>TypeScript React</span>
+              <span>
+                {state.previewHtml
+                  ? "HTML prototype / restricted sandbox"
+                  : "Draft / not connected to preview"}
+              </span>
+              {state.previewHtml && (
+                <button
+                  className="text-button"
+                  onClick={() =>
+                    update({
+                      previewHtml: state.sourceCode,
+                      previousPreviewHtml: state.previewHtml,
+                    })
+                  }
+                >
+                  Apply HTML to preview
+                </button>
+              )}
+              {state.previousPreviewHtml && (
+                <button
+                  className="text-button"
+                  onClick={() =>
+                    update({
+                      previewHtml: state.previousPreviewHtml,
+                      sourceCode: state.previousPreviewHtml,
+                      previousPreviewHtml: state.previewHtml,
+                    })
+                  }
+                >
+                  Restore previous preview
+                </button>
+              )}
             </footer>
           </div>
         )}

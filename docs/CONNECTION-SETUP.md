@@ -1,6 +1,6 @@
 # Kova connection setup
 
-Verified on 2026-09-24. Account access is not the same as an implemented product integration.
+Updated on 2026-09-25. Account access is not the same as an implemented product integration. See DELIVERY-STATUS.md for current verification boundaries.
 
 ## Hosting
 
@@ -10,7 +10,7 @@ Verified on 2026-09-24. Account access is not the same as an implemented product
 - Production URL: https://kova-rho-opal.vercel.app
 - Initial prototype deployment succeeded; public HTTP check returned 200.
 - Supabase public URL, publishable key, and production app URL are configured in Vercel.
-- OpenRouter remains local only. Do not enable a shared funded key in production until the chat endpoint verifies real authentication and enforces usage limits.
+- OpenRouter server secret and account allowlist configured in Vercel production. The new endpoint verifies real authentication, project membership, and a database-enforced ten-request daily limit. This is a request cap, not an exact currency budget.
 
 ## Supabase
 
@@ -21,7 +21,7 @@ Verified on 2026-09-24. Account access is not the same as an implemented product
 - Project reported `ACTIVE_HEALTHY` after creation.
 - Public configuration added to ignored `.env.local`; no secret belongs in Git.
 - Existing DarshOS and DarshLearningOS were not changed.
-- Database schema has not been applied. Cloud persistence is not connected to the local workspace yet.
+- Workspace schema, authorization guards and function permissions applied from the three workspace migration files. Projects, members, invitations, Bot simulations and credit transactions are cloud-backed. Rollback-only live SQL checks verified tenant isolation and protected writes.
 - Dashboard sign-in confirmed and Google provider enabled with approved credentials. Auth settings API returned HTTP 200 with `external.google: true`.
 - Dashboard warns that Darsh Org exceeded its previous billing-cycle quota and may be restricted from 13 October 2026 if it remains over quota. No billing changes made.
 
@@ -39,7 +39,7 @@ Verified on 2026-09-24. Account access is not the same as an implemented product
 - Implemented Google sign-in, server-side PKCE exchange, verified-user completion, callback failure recovery, and Supabase sign-out.
 - Live production Google consent completed with explicit approval and returned successfully to `/projects` on 2026-09-24.
 - All 18 desktop/mobile tests passed; the six auth cases cover missing/denied callbacks, missing sessions, and PKCE handoff. Auth cases were rerun after the final error-rendering adjustment and passed. Lint passed.
-- Project data remains local: Google login does not imply cloud workspace persistence or authorization of future backend features.
+- Project planning and explicit editor saves now persist to the cloud. Some legacy editor configuration, including the visual agent graph, still uses browser-local storage. Google sign-in does not authorize external GitHub, Notion or sandbox actions.
 
 ## GitHub App
 
