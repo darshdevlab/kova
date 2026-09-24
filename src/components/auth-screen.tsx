@@ -11,14 +11,17 @@ import {
   Sparkles,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
-import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import {
+  getSupabaseBrowserClient,
+  isSupabaseConfigured,
+} from "@/lib/supabase/client";
 import { writeSession } from "@/lib/storage";
 
 export function AuthScreen() {
   const router = useRouter();
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
-  const [email, setEmail] = useState("darsh@example.com");
-  const [password, setPassword] = useState("demo-password");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const configured = isSupabaseConfigured();
@@ -32,7 +35,9 @@ export function AuthScreen() {
     event.preventDefault();
     setMessage("");
     if (!configured) {
-      enterDemo();
+      setMessage(
+        "Account authentication is not connected yet. Use the demo workspace to explore Kova.",
+      );
       return;
     }
 
@@ -65,9 +70,12 @@ export function AuthScreen() {
         <BrandMark context="Architect 2.0" />
         <div className="auth-story-copy">
           <span className="eyebrow">One shared product workspace</span>
-          <h1 id="auth-title">From an idea to production, without losing control.</h1>
+          <h1 id="auth-title">
+            From an idea to production, without losing control.
+          </h1>
           <p>
-            Plan with stakeholders, build with agents, inspect the code, verify the result and ship from one traceable project.
+            Plan with stakeholders, build with agents, inspect the code, verify
+            the result and ship from one traceable project.
           </p>
         </div>
 
@@ -76,16 +84,30 @@ export function AuthScreen() {
             <div className="auth-workflow-step" key={step}>
               <span>{String(index + 1).padStart(2, "0")}</span>
               <strong>{step}</strong>
-              {index < 4 ? <ArrowRight aria-hidden="true" /> : <Check aria-hidden="true" />}
+              {index < 4 ? (
+                <ArrowRight aria-hidden="true" />
+              ) : (
+                <Check aria-hidden="true" />
+              )}
             </div>
           ))}
         </div>
 
         <div className="auth-evidence">
-          <div className="evidence-status"><span />Last build verified</div>
+          <div className="evidence-status">
+            <span />
+            Last build verified
+          </div>
           <p>12 requirements · 34 tests · 0 blockers</p>
           <div className="evidence-bars" aria-hidden="true">
-            <span /><span /><span /><span /><span /><span /><span /><span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
           </div>
         </div>
       </section>
@@ -93,36 +115,93 @@ export function AuthScreen() {
       <section className="auth-panel" aria-label="Account access">
         <div className="auth-card">
           <div className="auth-card-heading">
-            <span className="auth-icon"><Sparkles aria-hidden="true" /></span>
+            <span className="auth-icon">
+              <Sparkles aria-hidden="true" />
+            </span>
             <div>
-              <h2>{authMode === "signin" ? "Welcome back" : "Create your workspace"}</h2>
-              <p>{authMode === "signin" ? "Continue building where your team left off." : "Start with a working Kova project."}</p>
+              <h2>
+                {authMode === "signin"
+                  ? "Welcome back"
+                  : "Create your workspace"}
+              </h2>
+              <p>
+                {authMode === "signin"
+                  ? "Continue building where your team left off."
+                  : "Start with a working Kova project."}
+              </p>
             </div>
           </div>
 
-          <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
-            <button type="button" className={authMode === "signin" ? "is-active" : ""} onClick={() => setAuthMode("signin")}>Sign in</button>
-            <button type="button" className={authMode === "signup" ? "is-active" : ""} onClick={() => setAuthMode("signup")}>Create account</button>
+          <div
+            className="auth-tabs"
+            role="tablist"
+            aria-label="Authentication mode"
+          >
+            <button
+              type="button"
+              className={authMode === "signin" ? "is-active" : ""}
+              onClick={() => setAuthMode("signin")}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              className={authMode === "signup" ? "is-active" : ""}
+              onClick={() => setAuthMode("signup")}
+            >
+              Create account
+            </button>
           </div>
 
-          <button className="button secondary wide" type="button" onClick={enterDemo}>
+          <button
+            className="button secondary wide"
+            type="button"
+            onClick={enterDemo}
+          >
             <GitFork aria-hidden="true" /> Continue with demo workspace
           </button>
 
-          <div className="auth-divider"><span>or use email</span></div>
+          <div className="auth-divider">
+            <span>or use email</span>
+          </div>
 
           <form onSubmit={submit} className="auth-form">
             <label className="field">
               <span>Work email</span>
-              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
+                required
+              />
             </label>
             <label className="field">
               <span>Password</span>
-              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={authMode === "signin" ? "current-password" : "new-password"} minLength={8} required />
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete={
+                  authMode === "signin" ? "current-password" : "new-password"
+                }
+                minLength={8}
+                required
+              />
             </label>
-            {message ? <p className="form-message" role="status">{message}</p> : null}
-            <button className="button primary wide" type="submit" disabled={busy}>
-              {busy ? <LoaderCircle className="spin" aria-hidden="true" /> : null}
+            {message ? (
+              <p className="form-message" role="status">
+                {message}
+              </p>
+            ) : null}
+            <button
+              className="button primary wide"
+              type="submit"
+              disabled={busy}
+            >
+              {busy ? (
+                <LoaderCircle className="spin" aria-hidden="true" />
+              ) : null}
               {authMode === "signin" ? "Continue to Kova" : "Create workspace"}
               {busy ? null : <ArrowRight aria-hidden="true" />}
             </button>
@@ -130,7 +209,11 @@ export function AuthScreen() {
 
           <div className="auth-security">
             <LockKeyhole aria-hidden="true" />
-            <span>{configured ? "Supabase authentication connected" : "Demo mode active · Supabase ready"}</span>
+            <span>
+              {configured
+                ? "Supabase authentication connected"
+                : "Demo mode active · Supabase ready"}
+            </span>
           </div>
         </div>
       </section>

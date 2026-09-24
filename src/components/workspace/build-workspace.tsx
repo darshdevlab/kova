@@ -1,194 +1,679 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  ArrowRight,
+  ArrowUp,
   AtSign,
+  Bot,
   Check,
   ChevronDown,
-  Clipboard,
   Code2,
   Copy,
-  ExternalLink,
+  Download,
   Eye,
   FileCode2,
   History,
-  ImagePlus,
-  LoaderCircle,
   Maximize2,
-  MessageSquareText,
   Monitor,
-  MoreHorizontal,
   MousePointer2,
   Paperclip,
-  Play,
   RefreshCw,
   RotateCcw,
   Search,
-  Send,
   Smartphone,
   Sparkles,
   Square,
   Tablet,
-  Undo2,
   X,
 } from "lucide-react";
-import { CODE_FILES, CODE_SAMPLE, FALLBACK_MODELS, INITIAL_MESSAGES } from "@/lib/demo-data";
-import type { ChatMessage, KovaProject, ModelChoice } from "@/lib/types";
-import { ProductPreview } from "@/components/workspace/product-preview";
+import { FALLBACK_MODELS } from "@/lib/demo-data";
+import type { KovaProject, ModelChoice } from "@/lib/types";
+import { downloadFile, useWorkspace } from "@/lib/workspace-state";
+import { Modal } from "@/components/ui";
+import { ProductPreview } from "./product-preview";
 
-type BuildWorkspaceProps = { project: KovaProject };
-type BuildStage = "Understanding" | "Planning" | "Building" | "Testing" | "Complete";
-
-const STAGES: BuildStage[] = ["Understanding", "Planning", "Building", "Testing", "Complete"];
-
-export function BuildWorkspace({ project }: BuildWorkspaceProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
-  const [prompt, setPrompt] = useState("");
+export function BuildWorkspace({ project }: { project: KovaProject }) {
+  const { state, update, notify, log, navigate } = useWorkspace();
   const [models, setModels] = useState<ModelChoice[]>(FALLBACK_MODELS);
-  const [model, setModel] = useState("auto");
   const [showModels, setShowModels] = useState(false);
+  const [modelQuery, setModelQuery] = useState("");
   const [running, setRunning] = useState(false);
-  const [stage, setStage] = useState<BuildStage>("Complete");
-  const [workspaceTab, setWorkspaceTab] = useState<"preview" | "code">("preview");
-  const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
-  const [version, setVersion] = useState(1);
+  const [tab, setTab] = useState<"preview" | "code">(
+    project.mode === "Developer" ? "code" : "preview",
+  );
+  const [device, setDevice] = useState("desktop");
   const [selection, setSelection] = useState<string | null>(null);
-  const [activeFile, setActiveFile] = useState(CODE_FILES[0]);
-  const abortRef = useRef<AbortController | null>(null);
-  const conversationEndRef = useRef<HTMLDivElement | null>(null);
-
+  const [scope, setScope] = useState("Element");
+  const [context, setContext] = useState(false);
+  const [history, setHistory] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState("Preview");
+  const [previewKey, setPreviewKey] = useState(0);
+  const [expanded, setExpanded] = useState(false);
+  const [attachments, setAttachments] = useState<string[]>([]);
+  const abort = useRef<AbortController | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    fetch("/api/models")
+    const controller = new AbortController();
+    fetch("/api/models", { signal: controller.signal })
       .then((response) => response.json())
-      .then((payload: { models?: ModelChoice[] }) => {
+      .then((payload) => {
         if (payload.models?.length) setModels(payload.models);
       })
       .catch(() => undefined);
+    return () => {
+      controller.abort();
+      abort.current?.abort();
+    };
   }, []);
-
   useEffect(() => {
-    conversationEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, stage]);
-
-  const selectedModel = useMemo(
-    () => models.find((item) => item.id === model) ?? FALLBACK_MODELS[0],
-    [model, models],
-  );
-
-  function wait(ms: number) {
-    return new Promise((resolve) => window.setTimeout(resolve, ms));
-  }
-
-  async function sendPrompt() {
-    const value = prompt.trim();
+    end.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [state.messages.length, running]);
+  const selectedModel =
+    models.find((item) => item.id === state.model) || FALLBACK_MODELS[0];
+  async function send(value = state.draft.trim()) {
     if (!value || running) return;
-    const userMessage: ChatMessage = { id: crypto.randomUUID(), role: "user", content: value, meta: "Just now" };
-    setMessages((current) => [...current, userMessage]);
-    setPrompt("");
-    setRunning(true);
-    setStage("Understanding");
-    abortRef.current = new AbortController();
-
-    const request = fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: abortRef.current.signal,
-      body: JSON.stringify({ prompt: value, model, mode: project.mode, projectName: project.name }),
-    }).then(async (response) => {
-      const payload = (await response.json()) as { content?: string; model?: string; funding?: string; error?: string };
-      if (!response.ok) throw new Error(payload.error ?? "Build request failed");
-      return payload;
-    });
-
-    try {
-      for (const nextStage of STAGES.slice(1, -1)) {
-        await wait(320);
-        if (abortRef.current?.signal.aborted) return;
-        setStage(nextStage);
-      }
-      const result = await request;
-      setStage("Complete");
-      setVersion((current) => current + 1);
-      setMessages((current) => [...current, {
+    const nextMessages = [
+      ...state.messages,
+      {
         id: crypto.randomUUID(),
-        role: "assistant",
-        content: result.content ?? "The requested change is ready to review.",
-        meta: `${result.model ?? selectedModel.name} · ${result.funding ?? "Demo"} · 6 files changed`,
-      }]);
+        role: "user" as const,
+        content: value,
+        meta: `${selectedModel.name}${attachments.length ? ` / ${attachments.length} attachments` : ""}`,
+      },
+    ];
+    update({ messages: nextMessages, draft: "" });
+    setRunning(true);
+    const controller = new AbortController();
+    abort.current = controller;
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          prompt: value,
+          model: state.model,
+          mode: project.mode,
+          projectName: project.name,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.error || "The model request failed");
+      if (controller.signal.aborted) return;
+      update({
+        messages: [
+          ...nextMessages,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: result.content,
+            meta:
+              result.funding === "Demo"
+                ? "Local prototype response / no repository changes"
+                : `${result.model} / AI response only`,
+          },
+        ],
+        version: state.version + 1,
+        verifiedVersion: 0,
+        reviewVersion: 0,
+      });
+      log(
+        "Build conversation updated",
+        `Version ${state.version + 1}. ${result.funding === "Demo" ? "Local response" : "OpenRouter response"}.`,
+        "Build",
+      );
+      setAttachments([]);
     } catch (error) {
-      if ((error as Error).name !== "AbortError") {
-        setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: "The model request did not complete. Your project remains unchanged; retry when the connection is ready.", meta: "No changes applied" }]);
-      }
-      setStage("Complete");
+      update({ draft: value });
+      if ((error as Error).name !== "AbortError")
+        notify((error as Error).message);
     } finally {
       setRunning(false);
-      abortRef.current = null;
+      abort.current = null;
     }
   }
-
-  function stopBuild() {
-    abortRef.current?.abort();
-    setRunning(false);
-    setStage("Complete");
-    setMessages((current) => [...current, { id: crypto.randomUUID(), role: "assistant", content: "Build stopped. No incomplete changes were applied.", meta: "Restored last checkpoint" }]);
-  }
-
   return (
-    <div className={`build-workspace ${selection ? "has-selection" : ""}`}>
+    <div
+      className={`build-workspace ${expanded ? "preview-expanded" : ""}`}
+      data-mobile-panel={mobilePanel}
+    >
+      <div className="mobile-build-tabs">
+        {["Preview", "Conversation"].map((item) => (
+          <button
+            key={item}
+            className={mobilePanel === item ? "is-active" : ""}
+            onClick={() => setMobilePanel(item)}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
       <section className="conversation-panel" aria-label="Build conversation">
-        <header className="panel-header"><div><MessageSquareText aria-hidden="true" /><span><strong>Build</strong><small>Project conversation</small></span></div><div><button className="icon-button ghost" type="button" aria-label="Conversation history"><History aria-hidden="true" /></button><button className="icon-button ghost" type="button" aria-label="More conversation actions"><MoreHorizontal aria-hidden="true" /></button></div></header>
+        <header className="panel-header">
+          <div>
+            <span className="assistant-symbol">
+              <Sparkles />
+            </span>
+            <strong>Build with Kova</strong>
+          </div>
+          <button
+            className="icon-button ghost"
+            onClick={() => setHistory(true)}
+            aria-label="Conversation history"
+            title="Conversation history"
+          >
+            <History />
+          </button>
+        </header>
         <div className="conversation-scroll">
-          <div className="conversation-date"><span>Today</span></div>
-          {messages.map((message) => (
-            <article className={`chat-message ${message.role}`} key={message.id}>
-              <div className="message-author">{message.role === "assistant" ? <span className="assistant-avatar"><Sparkles aria-hidden="true" /></span> : <span className="user-avatar">D</span>}<strong>{message.role === "assistant" ? "Kova" : "You"}</strong><time>{message.role === "assistant" ? "Agent" : "Member"}</time></div>
+          <div className="conversation-intro">
+            <span className="eyebrow">Your starting point</span>
+            <h2>{project.name}</h2>
+            <p>{state.brief}</p>
+            <button className="text-button" onClick={() => navigate("plan")}>
+              Review the plan
+              <ArrowRight />
+            </button>
+          </div>
+          <article className="chat-message assistant">
+            <div className="message-author">
+              <span className="assistant-avatar">
+                <Sparkles />
+              </span>
+              <strong>Kova</strong>
+              <span>Workspace ready</span>
+            </div>
+            <p>
+              Your project context is in place. Explore the sample preview,
+              refine the brief, or configure the agents and data behind your
+              application.
+            </p>
+            <div className="build-artifact">
+              <span className="resource-icon">
+                <Code2 />
+              </span>
+              <div>
+                <strong>Application preview</strong>
+                <small>Interactive sample / v{state.version}</small>
+              </div>
+              <Check />
+            </div>
+            <div className="suggestion-list">
+              <button onClick={() => navigate("agents")}>
+                <Bot />
+                Configure agents
+                <ArrowRight />
+              </button>
+              <button onClick={() => navigate("data")}>
+                <AtSign />
+                Set up data
+                <ArrowRight />
+              </button>
+            </div>
+          </article>
+          {state.messages.map((message) => (
+            <article
+              className={`chat-message ${message.role}`}
+              key={message.id}
+            >
+              <div className="message-author">
+                <span
+                  className={
+                    message.role === "assistant"
+                      ? "assistant-avatar"
+                      : "user-avatar"
+                  }
+                >
+                  {message.role === "assistant" ? <Sparkles /> : "D"}
+                </span>
+                <strong>{message.role === "assistant" ? "Kova" : "You"}</strong>
+              </div>
               <p>{message.content}</p>
-              {message.meta ? <div className="message-meta">{message.meta}</div> : null}
-              {message.role === "assistant" ? <div className="message-actions"><button type="button"><Copy aria-hidden="true" />Copy</button><button type="button"><RotateCcw aria-hidden="true" />Retry</button></div> : null}
+              <small className="message-meta">{message.meta}</small>
+              {message.role === "assistant" && (
+                <div className="message-actions">
+                  <button
+                    onClick={() =>
+                      void navigator.clipboard
+                        .writeText(message.content)
+                        .then(() => notify("Response copied"))
+                        .catch(() => notify("Clipboard unavailable"))
+                    }
+                  >
+                    <Copy />
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => {
+                      const previous = state.messages
+                        .slice(0, state.messages.indexOf(message))
+                        .filter((item) => item.role === "user")
+                        .at(-1);
+                      if (previous) void send(previous.content);
+                    }}
+                  >
+                    <RotateCcw />
+                    Retry
+                  </button>
+                </div>
+              )}
             </article>
           ))}
-          {running ? <div className="build-progress" aria-live="polite"><div className="build-progress-head"><span><LoaderCircle className="spin" aria-hidden="true" />Kova is building</span><strong>{stage}</strong></div><div className="build-stage-list">{STAGES.slice(0, -1).map((item, index) => { const currentIndex = STAGES.indexOf(stage); return <div key={item} className={index < currentIndex ? "is-done" : index === currentIndex ? "is-active" : ""}><span>{index < currentIndex ? <Check aria-hidden="true" /> : index + 1}</span><p><strong>{item}</strong><small>{item === "Understanding" ? "Mapping intent and context" : item === "Planning" ? "Identifying affected resources" : item === "Building" ? "Updating the product slice" : "Running focused checks"}</small></p></div>; })}</div></div> : null}
-          <div ref={conversationEndRef} />
+          {running && (
+            <div className="building-indicator" role="status">
+              <span className="pulse-dot" />
+              Kova is responding
+              <button
+                className="text-button"
+                onClick={() => {
+                  abort.current?.abort();
+                  setRunning(false);
+                  notify("Response stopped");
+                }}
+              >
+                Stop
+              </button>
+            </div>
+          )}
+          <div ref={end} />
         </div>
         <div className="composer-wrap">
-          <div className="composer-context"><button type="button"><AtSign aria-hidden="true" />2 context items</button><span>Draft saved</span></div>
+          <div className="composer-context">
+            <button onClick={() => setContext(true)}>
+              <AtSign />
+              {state.context.length} context sources
+            </button>
+            <span>Saved</span>
+          </div>
           <div className="composer">
-            <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void sendPrompt(); } }} placeholder="Ask Kova to build, change, diagnose or test…" rows={3} aria-label="Build prompt" />
-            <div className="composer-toolbar">
-              <div><button className="composer-icon" type="button" aria-label="Attach file" title="Attach file"><Paperclip aria-hidden="true" /></button><button className="composer-icon" type="button" aria-label="Attach screenshot" title="Attach screenshot"><ImagePlus aria-hidden="true" /></button></div>
-              <div className="composer-send-group">
-                <div className="model-picker">
-                  <button type="button" onClick={() => setShowModels((value) => !value)} aria-expanded={showModels}><Sparkles aria-hidden="true" /><span>{selectedModel.name}</span><ChevronDown aria-hidden="true" /></button>
-                  {showModels ? <div className="model-menu"><div className="model-menu-head"><strong>Select build model</strong><small>OpenRouter catalog</small></div><label><Search aria-hidden="true" /><input placeholder="Search models" /></label>{models.slice(0, 8).map((item) => <button type="button" key={item.id} className={model === item.id ? "is-selected" : ""} onClick={() => { setModel(item.id); setShowModels(false); }}><span><strong>{item.name}</strong><small>{item.provider} · {item.description}</small></span><em>{item.speed}</em>{model === item.id ? <Check aria-hidden="true" /> : null}</button>)}</div> : null}
-                </div>
-                {running ? <button className="send-button stop" type="button" onClick={stopBuild} aria-label="Stop build"><Square aria-hidden="true" /></button> : <button className="send-button" type="button" onClick={() => void sendPrompt()} disabled={!prompt.trim()} aria-label="Send prompt"><Send aria-hidden="true" /></button>}
+            {attachments.length > 0 && (
+              <div className="attachment-list">
+                {attachments.map((name) => (
+                  <span key={name}>
+                    <Paperclip size={12} />
+                    {name}
+                    <button
+                      onClick={() =>
+                        setAttachments((current) =>
+                          current.filter((item) => item !== name),
+                        )
+                      }
+                      aria-label={`Remove attachment ${name}`}
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
               </div>
+            )}
+            <textarea
+              value={state.draft}
+              onChange={(e) => update({ draft: e.target.value })}
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing
+                ) {
+                  e.preventDefault();
+                  void send();
+                }
+              }}
+              placeholder="What should we work on next?"
+              aria-label="Build prompt"
+              rows={3}
+            />
+            <div className="composer-toolbar">
+              <input
+                type="file"
+                ref={fileInput}
+                hidden
+                multiple
+                accept=".txt,.md,.json,.csv,.png,.jpg,.jpeg,.webp"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  if (files.some((file) => file.size > 5_000_000)) {
+                    notify("Choose files under 5 MB");
+                    return;
+                  }
+                  const names = files.map((file) => file.name);
+                  setAttachments((current) => [
+                    ...new Set([...current, ...names]),
+                  ]);
+                  update({
+                    context: [
+                      ...new Set([
+                        ...state.context,
+                        ...names.map((name) => `Attachment reference: ${name}`),
+                      ]),
+                    ],
+                  });
+                  notify(
+                    "File references attached. File content is not sent to the model.",
+                  );
+                  e.target.value = "";
+                }}
+              />
+              <button
+                className="icon-button ghost"
+                onClick={() => fileInput.current?.click()}
+                aria-label="Attach file"
+                title="Attach file"
+              >
+                <Paperclip />
+              </button>
+              <button
+                className="model-trigger"
+                onClick={() => setShowModels(true)}
+              >
+                <Sparkles />
+                <span>{selectedModel.name}</span>
+                <ChevronDown />
+              </button>
+              <button
+                className="send-button"
+                onClick={() => (running ? abort.current?.abort() : void send())}
+                disabled={!running && !state.draft.trim()}
+                aria-label={running ? "Stop response" : "Send prompt"}
+              >
+                {running ? <Square /> : <ArrowUp />}
+              </button>
             </div>
           </div>
-          <p className="composer-help">Kova can make mistakes. Review diffs and evidence before shipping.</p>
+          <div className="composer-footnote">
+            <span className="status-dot" />
+            Local prototype<span>Changes stay on this device</span>
+          </div>
         </div>
       </section>
-
       <section className="canvas-panel" aria-label="Project output">
         <header className="canvas-header">
-          <div className="canvas-tabs" role="tablist"><button type="button" className={workspaceTab === "preview" ? "is-active" : ""} onClick={() => setWorkspaceTab("preview")}><Eye aria-hidden="true" />Preview</button><button type="button" className={workspaceTab === "code" ? "is-active" : ""} onClick={() => setWorkspaceTab("code")}><Code2 aria-hidden="true" />Code</button></div>
+          <div className="canvas-tabs">
+            {(["preview", "code"] as const).map((item) => (
+              <button
+                className={tab === item ? "is-active" : ""}
+                key={item}
+                onClick={() => setTab(item)}
+              >
+                {item === "preview" ? <Eye /> : <Code2 />}
+                {item === "preview" ? "Preview" : "Code"}
+              </button>
+            ))}
+          </div>
           <div className="canvas-actions">
-            {workspaceTab === "preview" ? <div className="device-picker" role="group" aria-label="Preview device"><button type="button" className={device === "desktop" ? "is-active" : ""} onClick={() => setDevice("desktop")} aria-label="Desktop preview"><Monitor aria-hidden="true" /></button><button type="button" className={device === "tablet" ? "is-active" : ""} onClick={() => setDevice("tablet")} aria-label="Tablet preview"><Tablet aria-hidden="true" /></button><button type="button" className={device === "mobile" ? "is-active" : ""} onClick={() => setDevice("mobile")} aria-label="Mobile preview"><Smartphone aria-hidden="true" /></button></div> : null}
-            <button className="icon-button ghost" type="button" aria-label="Undo"><Undo2 aria-hidden="true" /></button><button className="icon-button ghost" type="button" aria-label="Refresh"><RefreshCw aria-hidden="true" /></button><button className="icon-button ghost" type="button" aria-label="Open preview"><ExternalLink aria-hidden="true" /></button><button className="icon-button ghost" type="button" aria-label="Full screen"><Maximize2 aria-hidden="true" /></button>
+            <div className="device-picker">
+              {[
+                { id: "desktop", icon: Monitor },
+                { id: "tablet", icon: Tablet },
+                { id: "mobile", icon: Smartphone },
+              ].map(({ id, icon: Icon }) => (
+                <button
+                  key={id}
+                  className={device === id ? "is-active" : ""}
+                  onClick={() => setDevice(id)}
+                  aria-label={`${id} preview`}
+                  title={`${id} preview`}
+                >
+                  <Icon />
+                </button>
+              ))}
+            </div>
+            <span className="toolbar-divider" />
+            <button
+              className="icon-button ghost"
+              onClick={() => {
+                setPreviewKey((value) => value + 1);
+                notify("Preview refreshed");
+              }}
+              aria-label="Refresh preview"
+              title="Refresh preview"
+            >
+              <RefreshCw />
+            </button>
+            <button
+              className="icon-button ghost"
+              onClick={() => setExpanded(!expanded)}
+              aria-label="Expand preview"
+              title="Expand preview"
+            >
+              <Maximize2 />
+            </button>
           </div>
         </header>
-        {workspaceTab === "preview" ? (
+        {tab === "preview" ? (
           <div className="preview-stage">
-            <div className="preview-address"><span><i />relaydesk.kova-preview.app</span><button type="button"><Clipboard aria-hidden="true" /></button></div>
-            <div className={`preview-frame ${device}`}><ProductPreview version={version} onSelect={setSelection} /></div>
-            <div className="preview-status"><span><i />Preview ready</span><span>Viewport {device === "desktop" ? "1440" : device === "tablet" ? "768" : "390"}px</span><button type="button"><MousePointer2 aria-hidden="true" />Select to edit</button></div>
+            <div className="preview-address">
+              <LockIcon />
+              <span>
+                {project.name.toLowerCase().replaceAll(" ", "-")}.preview
+              </span>
+              <span className="tag">Sample app</span>
+            </div>
+            <div className={`preview-frame ${device}`}>
+              <ProductPreview
+                key={previewKey}
+                version={state.version}
+                onSelect={setSelection}
+              />
+            </div>
+            <div className="preview-status">
+              <span>
+                <span className="status-dot" />
+                Preview ready
+              </span>
+              <button
+                className="text-button"
+                onClick={() => setSelection("Application interface")}
+              >
+                <MousePointer2 />
+                Select to edit
+              </button>
+              <button className="text-button" onClick={() => navigate("tests")}>
+                Continue to verify
+                <ArrowRight />
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="code-workspace"><aside><div className="code-sidebar-title"><span>Explorer</span><button type="button">•••</button></div><strong>RELAYDESK</strong>{CODE_FILES.map((file) => <button type="button" key={file} className={activeFile === file ? "is-active" : ""} onClick={() => setActiveFile(file)}><FileCode2 aria-hidden="true" /><span>{file}</span></button>)}</aside><section><header><span><FileCode2 aria-hidden="true" />{activeFile}</span><span>TypeScript React</span></header><pre aria-label="Source code"><code>{CODE_SAMPLE.split("\n").map((line, index) => <span key={`${index}-${line}`}><i>{index + 1}</i>{line}{"\n"}</span>)}</code></pre><footer><span>main*</span><span>Ln 8, Col 12</span><span>UTF-8</span></footer></section></div>
+          <div className="code-workspace">
+            <header>
+              <span>
+                <FileCode2 />
+                app/page.tsx
+              </span>
+              <button
+                className="text-button"
+                onClick={() => downloadFile("page.tsx", state.sourceCode)}
+              >
+                <Download />
+                Export
+              </button>
+            </header>
+            <textarea
+              spellCheck={false}
+              aria-label="Source code editor"
+              value={state.sourceCode}
+              onChange={(e) =>
+                update({
+                  sourceCode: e.target.value,
+                  verifiedVersion: 0,
+                  reviewVersion: 0,
+                })
+              }
+            />
+            <footer>
+              <span>Local draft / not connected to preview</span>
+              <span>TypeScript React</span>
+            </footer>
+          </div>
         )}
       </section>
-
-      {selection ? <aside className="selection-panel" aria-label="Selected preview element"><header><div><MousePointer2 aria-hidden="true" /><span><strong>Context Lens</strong><small>Selected in preview</small></span></div><button className="icon-button ghost" type="button" onClick={() => setSelection(null)} aria-label="Close selection"><X aria-hidden="true" /></button></header><div className="selection-summary"><span className="eyebrow">Selected element</span><h2>{selection}</h2><p>Connected to <code>components/ticket-queue.tsx</code> and 3 verification checks.</p></div><div className="scope-control"><span>Change scope</span><div><button className="is-active" type="button">This element</button><button type="button">Component</button><button type="button">Journey</button></div></div><div className="selection-actions"><button type="button" onClick={() => { setPrompt(`Change ${selection} to make its status clearer without changing the shared design system.`); setSelection(null); }}><Sparkles aria-hidden="true" /><span><strong>Ask a change</strong><small>Describe the desired outcome</small></span></button><button type="button"><Play aria-hidden="true" /><span><strong>Test this</strong><small>Run linked verification</small></span></button><button type="button"><Code2 aria-hidden="true" /><span><strong>Open code</strong><small>Jump to implementation</small></span></button></div><div className="truth-state"><span><Check aria-hidden="true" />Tested</span><p>3/3 linked checks passed on this version.</p></div></aside> : null}
+      {selection && (
+        <Modal title="Context Lens" close={() => setSelection(null)}>
+          <div className="selection-summary">
+            <span className="eyebrow">Selected element</span>
+            <h3>{selection}</h3>
+          </div>
+          <div className="mode-segment">
+            {["Element", "Component", "Journey"].map((item) => (
+              <button
+                className={scope === item ? "is-active" : ""}
+                key={item}
+                onClick={() => setScope(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+          <label className="field lens-prompt">
+            <span>Describe the change</span>
+            <textarea
+              rows={3}
+              placeholder="Make this clearer..."
+              value={state.draft}
+              onChange={(e) => update({ draft: e.target.value })}
+            />
+          </label>
+          <div className="modal-actions">
+            <button
+              className="button quiet"
+              onClick={() => {
+                setSelection(null);
+                setTab("code");
+              }}
+            >
+              <Code2 />
+              Open code
+            </button>
+            <button
+              className="button primary"
+              onClick={() => {
+                update({
+                  draft: `[${scope}: ${selection}] ${state.draft || "Improve this element's clarity and accessibility."}`,
+                });
+                setSelection(null);
+                setExpanded(false);
+                setMobilePanel("Conversation");
+                notify("Selection added to your prompt");
+              }}
+            >
+              Add to prompt
+              <ArrowRight />
+            </button>
+          </div>
+        </Modal>
+      )}
+      {showModels && (
+        <Modal title="Choose a model" close={() => setShowModels(false)}>
+          <label className="search-field wide">
+            <Search />
+            <input
+              autoFocus
+              placeholder="Search models or providers"
+              aria-label="Search models"
+              value={modelQuery}
+              onChange={(e) => setModelQuery(e.target.value)}
+            />
+          </label>
+          <div className="model-list">
+            {models
+              .filter((item) =>
+                `${item.name} ${item.provider}`
+                  .toLowerCase()
+                  .includes(modelQuery.toLowerCase()),
+              )
+              .map((item) => (
+                <button
+                  className={state.model === item.id ? "is-selected" : ""}
+                  key={item.id}
+                  onClick={() => {
+                    update({ model: item.id });
+                    setShowModels(false);
+                  }}
+                >
+                  <span className="resource-icon">
+                    <Bot />
+                  </span>
+                  <span>
+                    <strong>{item.name}</strong>
+                    <small>{item.provider}</small>
+                  </span>
+                  {state.model === item.id && <Check />}
+                </button>
+              ))}
+          </div>
+        </Modal>
+      )}
+      {context && (
+        <Modal title="Project context" close={() => setContext(false)}>
+          {state.context.map((item) => (
+            <div className="resource-row" key={item}>
+              <FileCode2 />
+              <span>{item}</span>
+              {item !== "Project brief" && (
+                <button
+                  className="icon-button ghost"
+                  aria-label={`Remove ${item}`}
+                  onClick={() =>
+                    update({
+                      context: state.context.filter((value) => value !== item),
+                    })
+                  }
+                >
+                  <X />
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            className="button quiet"
+            onClick={() => {
+              setContext(false);
+              navigate("settings");
+            }}
+          >
+            Add source
+            <LinkIcon />
+          </button>
+        </Modal>
+      )}
+      {history && (
+        <Modal title="Conversation history" close={() => setHistory(false)}>
+          {state.messages.length ? (
+            <div className="command-results">
+              {state.messages
+                .filter((item) => item.role === "user")
+                .map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      update({ draft: item.content });
+                      setHistory(false);
+                    }}
+                  >
+                    <History />
+                    <span>{item.content}</span>
+                    <ArrowRight />
+                  </button>
+                ))}
+            </div>
+          ) : (
+            <p className="muted">
+              Your prompts will appear here after your first message.
+            </p>
+          )}
+        </Modal>
+      )}
     </div>
   );
+}
+
+function LockIcon() {
+  return <Check size={12} />;
+}
+function LinkIcon() {
+  return <ArrowRight />;
 }

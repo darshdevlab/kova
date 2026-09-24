@@ -5,168 +5,1593 @@ import {
   Activity,
   ArrowRight,
   Bot,
-  Braces,
   Check,
   CheckCircle2,
-  ChevronRight,
-  CircleDot,
-  Clock3,
-  Cloud,
+  Circle,
   Code2,
   Database,
-  ExternalLink,
+  Download,
   FileText,
   FlaskConical,
-  Gauge,
   GitBranch,
-  GitFork,
   GitPullRequest,
-  Globe2,
+  Globe,
   KeyRound,
-  Layers3,
   Link2,
-  LoaderCircle,
-  Mail,
-  MessageSquareText,
-  MoreHorizontal,
-  Network,
+  Lock,
   Play,
   Plus,
-  RefreshCw,
   Rocket,
   Search,
   Settings,
   ShieldCheck,
-  Sparkles,
-  Table2,
-  TestTube2,
-  UploadCloud,
-  UserCheck,
+  Trash2,
   Users,
-  Webhook,
-  Zap,
+  X,
 } from "lucide-react";
+import { Modal, NextStep, SurfaceHeader } from "@/components/ui";
+import { downloadFile, useWorkspace } from "@/lib/workspace-state";
+import dynamic from "next/dynamic";
 
-function SurfaceHeader({ eyebrow, title, description, children }: { eyebrow: string; title: string; description: string; children?: React.ReactNode }) {
-  return <header className="surface-header"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{description}</p></div>{children ? <div className="surface-header-actions">{children}</div> : null}</header>;
-}
+export const AgentsSurface = dynamic(
+  () => import("./agent-flow").then((module) => module.AgentFlow),
+  {
+    ssr: false,
+    loading: () => <div className="empty-state">Opening workflow...</div>,
+  },
+);
 
 export function PlanSurface() {
+  const { project, state, update, log, notify, navigate } = useWorkspace();
+  const [requirement, setRequirement] = useState("");
+  const [tab, setTab] = useState("Brief");
+  const exportPlan = () =>
+    downloadFile(
+      `${project.name}-prd.md`,
+      `# ${project.name}\n\n${state.brief}\n\n## Acceptance criteria\n${state.requirements.map((item) => `- ${item}`).join("\n")}`,
+    );
   return (
     <div className="surface-page">
-      <SurfaceHeader eyebrow="Living specification" title="Plan" description="Requirements, decisions and implementation stay connected to the work.">
-        <button className="button quiet" type="button"><FileText aria-hidden="true" />Export PRD</button><button className="button primary" type="button"><Check aria-hidden="true" />Approve plan</button>
+      <SurfaceHeader
+        eyebrow="01 / Define"
+        title="A clear plan. A better build."
+        description={project.name}
+      >
+        <button className="button quiet" onClick={exportPlan}>
+          <Download />
+          Export PRD
+        </button>
+        <button
+          className="button primary"
+          disabled={!state.brief.trim() || !state.requirements.length}
+          onClick={() => {
+            update({ approved: true });
+            log(
+              "Plan approved",
+              `${state.requirements.length} acceptance criteria`,
+              "Plan",
+            );
+            notify("Plan approved. Your build keeps this context.");
+          }}
+        >
+          {state.approved ? <Check /> : <FileText />}
+          {state.approved ? "Approved" : "Approve plan"}
+        </button>
       </SurfaceHeader>
-      <div className="readiness-band"><div><span className="readiness-score">86</span><p><strong>Ready to build</strong><small>2 non-blocking questions remain</small></p></div><div className="readiness-checks"><span><Check aria-hidden="true" />Problem defined</span><span><Check aria-hidden="true" />Users identified</span><span><Check aria-hidden="true" />States covered</span><span className="pending"><CircleDot aria-hidden="true" />Analytics events</span></div><button type="button">Review questions <ChevronRight aria-hidden="true" /></button></div>
       <div className="plan-layout">
         <section className="document-surface">
-          <div className="document-toolbar"><span>Product requirements document</span><div><button type="button"><MessageSquareText aria-hidden="true" />4 comments</button><button type="button"><MoreHorizontal aria-hidden="true" /></button></div></div>
-          <article className="prd-document"><span className="document-version">PRD v3 · Updated 12 minutes ago</span><h2>RelayDesk support operations</h2><p className="document-lede">Give support teams one place to prioritize customer issues, collaborate with an AI triage agent and measure service quality.</p><h3>Problem</h3><p>Support managers lose time moving between inboxes, knowledge tools and analytics. Agents repeat triage work while urgent requests wait without a clear owner.</p><h3>Primary outcomes</h3><ul><li><Check aria-hidden="true" /><span><strong>Resolve faster</strong>Reduce median first response below five minutes.</span></li><li><Check aria-hidden="true" /><span><strong>Keep humans accountable</strong>Require review for low-confidence and high-risk agent actions.</span></li><li><Check aria-hidden="true" /><span><strong>Improve from evidence</strong>Connect ticket outcomes to knowledge gaps and agent evaluations.</span></li></ul><h3>Acceptance criteria</h3><ol><li>Users can filter and assign the priority queue without a page reload.</li><li>The triage agent shows confidence, sources and escalation reason.</li><li>Managers can compare response and resolution trends over time.</li><li>Every automated action appears in the audit timeline.</li></ol></article>
+          <div className="tab-bar">
+            {["Brief", "Acceptance criteria", "Context"].map((name) => (
+              <button
+                className={tab === name ? "is-active" : ""}
+                key={name}
+                onClick={() => setTab(name)}
+              >
+                {name}
+                {name === "Acceptance criteria" && (
+                  <span>{state.requirements.length}</span>
+                )}
+              </button>
+            ))}
+          </div>
+          {tab === "Brief" ? (
+            <div className="prd-document">
+              <div className="document-meta">
+                <span className="tag">PRD v{state.version}</span>
+                <span>Saved automatically</span>
+              </div>
+              <h2>{project.name}</h2>
+              <label className="field">
+                <span>Product brief</span>
+                <textarea
+                  className="brief-editor"
+                  value={state.brief}
+                  onChange={(e) =>
+                    update({ brief: e.target.value, approved: false })
+                  }
+                  rows={7}
+                />
+              </label>
+              <h3>Delivery boundaries</h3>
+              <div className="principle-row">
+                <ShieldCheck />
+                <div>
+                  <strong>Human approval before release</strong>
+                  <p>Review changes and verification before publishing.</p>
+                </div>
+              </div>
+              <div className="principle-row">
+                <GitBranch />
+                <div>
+                  <strong>Isolated project changes</strong>
+                  <p>
+                    Branch policy: {state.branchStrategy}. Target:{" "}
+                    {state.baseBranch}.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : tab === "Acceptance criteria" ? (
+            <div className="prd-document">
+              <h2>What does done look like?</h2>
+              <div className="editable-list">
+                {state.requirements.map((item, i) => (
+                  <div key={i}>
+                    <span className="number-label">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <input
+                      aria-label={`Requirement ${i + 1}`}
+                      value={item}
+                      onChange={(e) =>
+                        update({
+                          requirements: state.requirements.map(
+                            (value, index) =>
+                              index === i ? e.target.value : value,
+                          ),
+                          approved: false,
+                        })
+                      }
+                    />
+                    <button
+                      className="icon-button ghost"
+                      aria-label={`Remove requirement ${i + 1}`}
+                      onClick={() =>
+                        update({
+                          requirements: state.requirements.filter(
+                            (_, index) => i !== index,
+                          ),
+                          approved: false,
+                        })
+                      }
+                    >
+                      <X />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <form
+                className="inline-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (requirement.trim()) {
+                    update({
+                      requirements: [...state.requirements, requirement.trim()],
+                      approved: false,
+                    });
+                    setRequirement("");
+                  }
+                }}
+              >
+                <input
+                  aria-label="New requirement"
+                  placeholder="Add an acceptance criterion"
+                  value={requirement}
+                  onChange={(e) => setRequirement(e.target.value)}
+                />
+                <button className="button quiet" type="submit">
+                  <Plus />
+                  Add
+                </button>
+              </form>
+            </div>
+          ) : (
+            <div className="prd-document">
+              <h2>Project context</h2>
+              {state.context.map((item) => (
+                <div className="resource-row" key={item}>
+                  <FileText />
+                  <span>{item}</span>
+                  <span className="tag">Attached</span>
+                </div>
+              ))}
+              <button
+                className="button quiet"
+                onClick={() => navigate("settings")}
+              >
+                <Link2 />
+                Connect a source
+              </button>
+            </div>
+          )}
         </section>
         <aside className="plan-aside">
-          <section><div className="aside-heading"><span><Network aria-hidden="true" />Architecture</span><button type="button">Open map</button></div><div className="mini-architecture"><div><Layers3 aria-hidden="true" /><span>Next.js UI</span></div><i /><div><Braces aria-hidden="true" /><span>API layer</span></div><i /><div><Database aria-hidden="true" /><span>Postgres</span></div></div></section>
-          <section><div className="aside-heading"><span><Users aria-hidden="true" />Personas</span><button type="button"><Plus aria-hidden="true" /></button></div><div className="persona-list"><div><span>SM</span><p><strong>Support manager</strong><small>Queue health and coaching</small></p></div><div><span>AG</span><p><strong>Support agent</strong><small>Fast, reliable resolution</small></p></div><div><span>OP</span><p><strong>Operations lead</strong><small>Policy and performance</small></p></div></div></section>
-          <section><div className="aside-heading"><span><Activity aria-hidden="true" />Decision ledger</span><button type="button">View all</button></div><div className="decision-list"><div><i className="accepted" /><p><strong>Human review threshold</strong><small>Confidence below 82% · Accepted</small></p></div><div><i className="accepted" /><p><strong>Shared tenant model</strong><small>RLS by workspace · Accepted</small></p></div><div><i className="open" /><p><strong>Archive retention</strong><small>30 or 90 days · Open</small></p></div></div></section>
+          <section>
+            <span className="eyebrow">Readiness</span>
+            <div className="readiness-number">
+              {state.approved ? "Ready" : "In review"}
+              <span
+                className={`status-dot ${state.approved ? "" : "warning"}`}
+              />
+            </div>
+            <div className="checklist">
+              <span>
+                <Check />
+                Project brief
+              </span>
+              <span>
+                <Check />
+                {state.requirements.length} acceptance criteria
+              </span>
+              <span>
+                {state.approved ? <Check /> : <Circle />}Plan approval
+              </span>
+            </div>
+          </section>
+          <section>
+            <span className="eyebrow">Application structure</span>
+            <div className="architecture-stack">
+              <div>
+                <Globe />
+                <span>Interface</span>
+                <small>Next.js</small>
+              </div>
+              <i />
+              <div>
+                <Bot />
+                <span>Intelligence</span>
+                <small>{state.framework}</small>
+              </div>
+              <i />
+              <div>
+                <Database />
+                <span>Data</span>
+                <small>{state.tables.length} tables</small>
+              </div>
+            </div>
+          </section>
+          <section>
+            <span className="eyebrow">Decision</span>
+            <h3>One shared workspace</h3>
+            <p>
+              Requirements, build changes, and release decisions stay linked to
+              this project.
+            </p>
+          </section>
         </aside>
       </div>
-    </div>
-  );
-}
-
-export function AgentsSurface() {
-  const [selected, setSelected] = useState("Triage agent");
-  const nodes = [
-    { name: "New ticket", type: "Trigger", icon: Zap, x: "8%", y: "42%" },
-    { name: "Classify intent", type: "Agent", icon: Sparkles, x: "31%", y: "21%" },
-    { name: "Triage agent", type: "Agent", icon: Bot, x: "31%", y: "62%" },
-    { name: "Risk gate", type: "Approval", icon: ShieldCheck, x: "57%", y: "42%" },
-    { name: "Draft response", type: "Tool", icon: FileText, x: "80%", y: "21%" },
-    { name: "Escalate", type: "Action", icon: Users, x: "80%", y: "62%" },
-  ];
-  return (
-    <div className="surface-page full-height">
-      <SurfaceHeader eyebrow="Agentic application" title="Agents" description="Design the workflow visually, then inspect every model, tool and guardrail.">
-        <button className="button quiet" type="button"><Play aria-hidden="true" />Test run</button><button className="button primary" type="button"><Plus aria-hidden="true" />Add node</button>
-      </SurfaceHeader>
-      <div className="agent-layout">
-        <section className="agent-canvas">
-          <div className="canvas-grid" aria-hidden="true" />
-          <svg className="agent-lines" viewBox="0 0 1000 520" preserveAspectRatio="none" aria-hidden="true"><path d="M170 260 C230 260 225 125 310 125" /><path d="M170 260 C230 260 225 365 310 365" /><path d="M455 125 C505 125 505 260 570 260" /><path d="M455 365 C505 365 505 260 570 260" /><path d="M700 260 C750 260 745 125 810 125" /><path d="M700 260 C750 260 745 365 810 365" /></svg>
-          {nodes.map((node) => { const Icon = node.icon; return <button type="button" key={node.name} className={`agent-node ${selected === node.name ? "is-selected" : ""}`} style={{ left: node.x, top: node.y }} onClick={() => setSelected(node.name)}><span><Icon aria-hidden="true" /></span><p><strong>{node.name}</strong><small>{node.type}</small></p><i /></button>; })}
-          <div className="agent-canvas-tools"><button type="button">−</button><span>80%</span><button type="button">+</button><button type="button">Fit</button></div>
-        </section>
-        <aside className="agent-inspector"><div className="inspector-heading"><div><span className="agent-symbol"><Bot aria-hidden="true" /></span><p><strong>{selected}</strong><small>Agent node</small></p></div><button type="button"><MoreHorizontal aria-hidden="true" /></button></div><label className="field"><span>Model</span><button className="select-like" type="button">Auto · Claude Opus 5.5 <ChevronRight aria-hidden="true" /></button></label><label className="field"><span>Instructions</span><textarea rows={7} defaultValue="Classify priority and intent. Use approved knowledge before drafting. Escalate billing risk and confidence below 82%." /></label><div className="inspector-section"><span>Connected resources</span><button type="button"><Database aria-hidden="true" /><p><strong>Support knowledge</strong><small>184 documents</small></p><Check aria-hidden="true" /></button><button type="button"><Braces aria-hidden="true" /><p><strong>Ticket API</strong><small>6 operations</small></p><Check aria-hidden="true" /></button></div><div className="inspector-section"><span>Guardrails</span><label className="toggle-row"><p><strong>Require citations</strong><small>Sources for factual claims</small></p><input type="checkbox" defaultChecked /><i /></label><label className="toggle-row"><p><strong>Human risk gate</strong><small>Before sensitive actions</small></p><input type="checkbox" defaultChecked /><i /></label></div><button className="button primary wide" type="button">Save agent</button></aside>
-      </div>
+      <NextStep
+        title="Turn the plan into a first version"
+        detail={
+          state.approved
+            ? "Your approved brief and criteria travel with the build."
+            : "You can explore a build while the plan is still in review."
+        }
+        action="Continue to build"
+        onClick={() => navigate("build")}
+      />
     </div>
   );
 }
 
 export function DataSurface() {
-  const [tab, setTab] = useState<"schema" | "rows" | "auth">("schema");
+  const { state, update, log, notify, navigate } = useWorkspace();
+  const [tab, setTab] = useState("Tables");
+  const [selected, setSelected] = useState(state.tables[0]?.name || "");
+  const [query, setQuery] = useState("");
+  const [modal, setModal] = useState<"table" | "row" | null>(null);
+  const [name, setName] = useState("");
+  const [status, setStatus] = useState("Open");
+  const table = state.tables.find((item) => item.name === selected);
+  function save() {
+    if (!name.trim()) return;
+    if (modal === "table") {
+      const normalized = name.trim().toLowerCase().replace(/\W+/g, "_");
+      if (state.tables.some((item) => item.name === normalized)) {
+        notify("A table with that name already exists");
+        return;
+      }
+      update({ tables: [...state.tables, { name: normalized, rows: [] }] });
+      setSelected(normalized);
+      log("Table created", normalized, "Data");
+    } else
+      update({
+        tables: state.tables.map((item) =>
+          item.name === selected
+            ? {
+                ...item,
+                rows: [
+                  ...item.rows,
+                  {
+                    id: crypto.randomUUID().slice(0, 8),
+                    name: name.trim(),
+                    status,
+                  },
+                ],
+              }
+            : item,
+        ),
+      });
+    setModal(null);
+    setName("");
+    notify(modal === "table" ? "Table created locally" : "Row saved locally");
+  }
   return (
     <div className="surface-page">
-      <SurfaceHeader eyebrow="Application services" title="Data & authentication" description="A managed data layer with visible schema, policy and user access.">
-        <button className="button quiet" type="button"><UploadCloud aria-hidden="true" />Import data</button><button className="button primary" type="button"><Plus aria-hidden="true" />New table</button>
+      <SurfaceHeader
+        eyebrow="Resources"
+        title="Data & authentication"
+        description="Project data, schemas, and access policies"
+      >
+        <button
+          className="button quiet"
+          onClick={() =>
+            downloadFile(
+              "project-data.json",
+              JSON.stringify(state.tables, null, 2),
+              "application/json",
+            )
+          }
+        >
+          <Download />
+          Export data
+        </button>
+        <button
+          className="button primary"
+          onClick={() => {
+            setName("");
+            setModal("table");
+          }}
+        >
+          <Plus />
+          New table
+        </button>
       </SurfaceHeader>
-      <div className="service-status"><span><i />Database connected</span><code>Postgres 17 · ap-south-1</code><button type="button"><ExternalLink aria-hidden="true" />Open provider</button></div>
-      <div className="data-tabs"><button type="button" className={tab === "schema" ? "is-active" : ""} onClick={() => setTab("schema")}><Network aria-hidden="true" />Schema</button><button type="button" className={tab === "rows" ? "is-active" : ""} onClick={() => setTab("rows")}><Table2 aria-hidden="true" />Rows</button><button type="button" className={tab === "auth" ? "is-active" : ""} onClick={() => setTab("auth")}><UserCheck aria-hidden="true" />Authentication</button></div>
-      {tab === "schema" ? <div className="schema-layout"><aside className="table-list"><label><Search aria-hidden="true" /><input placeholder="Search tables" /></label>{["tickets", "customers", "conversations", "knowledge_articles", "agent_runs"].map((table, index) => <button type="button" key={table} className={index === 0 ? "is-active" : ""}><Table2 aria-hidden="true" /><span>{table}</span><small>{[128, 42, 386, 184, 864][index]}</small></button>)}</aside><section className="schema-detail"><div className="schema-title"><div><span><Table2 aria-hidden="true" /></span><p><strong>tickets</strong><small>Customer support requests and triage state</small></p></div><button type="button"><MoreHorizontal aria-hidden="true" /></button></div><div className="column-table"><div className="column-head"><span>Column</span><span>Type</span><span>Default</span><span>Policy</span></div>{[["id","uuid","gen_random_uuid()","Primary"],["workspace_id","uuid","-","RLS"],["subject","text","-","Required"],["priority","ticket_priority","normal","Required"],["assignee_id","uuid","null","Nullable"],["created_at","timestamptz","now()","Indexed"]].map((row) => <div key={row[0]}>{row.map((cell, index) => <span key={cell}>{index === 0 ? <><KeyRound aria-hidden="true" />{cell}</> : cell}</span>)}</div>)}</div><div className="rls-banner"><ShieldCheck aria-hidden="true" /><p><strong>Row-level security enabled</strong><small>Workspace members can only access tickets in their assigned workspace.</small></p><button type="button">View policies</button></div></section></div> : null}
-      {tab === "rows" ? <div className="data-placeholder"><Table2 aria-hidden="true" /><h2>Table explorer</h2><p>Browse, filter and edit seeded ticket records with policy-aware access.</p><button className="button primary" type="button">Open tickets</button></div> : null}
-      {tab === "auth" ? <div className="auth-config-grid"><section><span className="config-icon"><UserCheck aria-hidden="true" /></span><h2>Authentication methods</h2><p>Email and social sign-in for generated applications.</p><div className="provider-row"><Mail aria-hidden="true" /><span><strong>Email and password</strong><small>Verification required</small></span><i className="connected" /></div><div className="provider-row"><GitFork aria-hidden="true" /><span><strong>GitHub</strong><small>OAuth provider</small></span><button type="button">Configure</button></div><div className="provider-row"><Globe2 aria-hidden="true" /><span><strong>Google</strong><small>OAuth provider</small></span><button type="button">Configure</button></div></section><section><span className="config-icon"><ShieldCheck aria-hidden="true" /></span><h2>Roles and permissions</h2><p>Four application roles connected to database policies.</p>{["Administrator","Support manager","Support agent","Viewer"].map((role, index) => <div className="role-row" key={role}><span>{role}</span><small>{["All access","Manage and report","Work assigned tickets","Read only"][index]}</small><ChevronRight aria-hidden="true" /></div>)}</section></div> : null}
+      <div className="service-status">
+        <span>
+          <Database />
+          Local project database
+        </span>
+        <span className="tag">Prototype data</span>
+        <button className="text-button" onClick={() => navigate("settings")}>
+          Connect provider
+          <ArrowRight />
+        </button>
+      </div>
+      <div className="tab-bar">
+        {["Tables", "Authentication", "Policies"].map((item) => (
+          <button
+            className={tab === item ? "is-active" : ""}
+            key={item}
+            onClick={() => setTab(item)}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+      {tab === "Tables" ? (
+        <div className="schema-layout">
+          <aside className="table-list">
+            <label className="search-field">
+              <Search />
+              <input
+                placeholder="Find a table"
+                aria-label="Search tables"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
+            {state.tables
+              .filter((item) => item.name.includes(query))
+              .map((item) => (
+                <button
+                  key={item.name}
+                  className={selected === item.name ? "is-active" : ""}
+                  onClick={() => setSelected(item.name)}
+                >
+                  <Database />
+                  <span>{item.name}</span>
+                  <small>{item.rows.length}</small>
+                </button>
+              ))}
+          </aside>
+          <section className="schema-detail">
+            <div className="section-heading">
+              <h2>{table?.name || "Select a table"}</h2>
+              <button
+                className="button quiet compact"
+                disabled={!table}
+                onClick={() => {
+                  setName("");
+                  setModal("row");
+                }}
+              >
+                <Plus />
+                Insert row
+              </button>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {table?.rows.map((row) => (
+                    <tr key={row.id}>
+                      <td>
+                        <code>{row.id}</code>
+                      </td>
+                      <td>{row.name}</td>
+                      <td>
+                        <span className="tag">{row.status}</span>
+                      </td>
+                      <td>
+                        <button
+                          className="icon-button ghost"
+                          aria-label={`Delete ${row.name}`}
+                          onClick={() =>
+                            update({
+                              tables: state.tables.map((item) =>
+                                item.name === selected
+                                  ? {
+                                      ...item,
+                                      rows: item.rows.filter(
+                                        (value) => value.id !== row.id,
+                                      ),
+                                    }
+                                  : item,
+                              ),
+                            })
+                          }
+                        >
+                          <Trash2 />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!table?.rows.length && (
+                <div className="empty-state">
+                  <Database />
+                  <h3>No records yet</h3>
+                  <p>Insert the first row to start shaping this table.</p>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : tab === "Authentication" ? (
+        <section className="settings-section">
+          <h2>Sign-in methods</h2>
+          <p className="muted">
+            Configure the desired methods. Live sign-in requires a connected
+            authentication provider.
+          </p>
+          {["Email", "Google", "GitHub", "Magic link"].map((provider) => (
+            <label className="setting-row" key={provider}>
+              <span>
+                <strong>{provider}</strong>
+                <small>
+                  {state.authProviders.includes(provider)
+                    ? "Enabled in project configuration"
+                    : "Disabled"}
+                </small>
+              </span>
+              <input
+                type="checkbox"
+                checked={state.authProviders.includes(provider)}
+                onChange={(e) => {
+                  update({
+                    authProviders: e.target.checked
+                      ? [...state.authProviders, provider]
+                      : state.authProviders.filter((item) => item !== provider),
+                  });
+                  log("Authentication configuration updated", provider, "Data");
+                }}
+              />
+            </label>
+          ))}
+        </section>
+      ) : (
+        <section className="settings-section">
+          <h2>Access policies</h2>
+          <div className="notice">
+            <ShieldCheck />
+            Server-enforced policies require a connected database. These are the
+            planned boundaries.
+          </div>
+          {[
+            "Workspace members can read project records",
+            "Editors can create and update records",
+            "Only owners can delete records or change access",
+          ].map((item) => (
+            <div className="resource-row" key={item}>
+              <Lock />
+              <span>{item}</span>
+              <span className="tag">Planned</span>
+            </div>
+          ))}
+        </section>
+      )}
+      <NextStep
+        title="Check your data configuration"
+        detail="Validate table names and authentication settings with the project."
+        action="Continue to tests"
+        onClick={() => navigate("tests")}
+      />
+      {modal && (
+        <Modal
+          title={modal === "table" ? "Create table" : `Insert into ${selected}`}
+          close={() => setModal(null)}
+        >
+          <form
+            className="form-stack"
+            onSubmit={(e) => {
+              e.preventDefault();
+              save();
+            }}
+          >
+            <label className="field">
+              <span>{modal === "table" ? "Table name" : "Name"}</span>
+              <input
+                autoFocus
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
+            {modal === "row" && (
+              <label className="field">
+                <span>Status</span>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                >
+                  <option>Open</option>
+                  <option>Active</option>
+                  <option>Needs review</option>
+                  <option>Resolved</option>
+                </select>
+              </label>
+            )}
+            <button className="button primary" type="submit">
+              Save
+              <Check />
+            </button>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }
 
 export function TestsSurface() {
-  const [running, setRunning] = useState(false);
-  const [runComplete, setRunComplete] = useState(true);
-  async function runTests() { setRunning(true); setRunComplete(false); await new Promise((resolve) => window.setTimeout(resolve, 900)); setRunning(false); setRunComplete(true); }
+  const { state, update, log, navigate } = useWorkspace();
+  const [results, setResults] = useState<
+    { label: string; passed: boolean; detail: string }[] | null
+  >(null);
+  const [filter, setFilter] = useState("All checks");
+  const checks = [
+    {
+      label: "Project brief is present",
+      passed: state.brief.trim().length > 0,
+      detail: "A non-empty brief is stored with this project.",
+    },
+    {
+      label: "Acceptance criteria are defined",
+      passed:
+        state.requirements.length > 0 &&
+        state.requirements.every((item) => item.trim()),
+      detail: "All acceptance-criterion fields contain text.",
+    },
+    {
+      label: "Branch differs from protected base",
+      passed: !!state.branch.trim() && state.branch !== state.baseBranch,
+      detail: `${state.branch} targets ${state.baseBranch}.`,
+    },
+    {
+      label: "Table names are unique",
+      passed:
+        new Set(state.tables.map((item) => item.name)).size ===
+        state.tables.length,
+      detail: `${state.tables.length} distinct table definitions.`,
+    },
+    {
+      label: "Authentication method is configured",
+      passed: state.authProviders.length > 0,
+      detail:
+        state.authProviders.join(", ") ||
+        "Enable a sign-in method in Data & auth.",
+    },
+    {
+      label: "Sensitive actions require review",
+      passed: state.humanReview,
+      detail: "Human-review guardrail is enabled.",
+    },
+  ].map((item) => ({ ...item, passed: Boolean(item.passed) }));
+  const verified = state.verifiedVersion === state.version;
+  const shown = (results || (verified ? checks : [])).filter(
+    (item) => filter !== "Needs attention" || !item.passed,
+  );
+  function run() {
+    setResults(checks);
+    const passed = checks.every((item) => item.passed);
+    update({ verifiedVersion: passed ? state.version : 0 });
+    log(
+      passed
+        ? "Configuration checks passed"
+        : "Configuration checks need attention",
+      `${checks.filter((item) => item.passed).length}/${checks.length} checks, version ${state.version}`,
+      "Verification",
+    );
+  }
   return (
     <div className="surface-page">
-      <SurfaceHeader eyebrow="Verification evidence" title="Tests" description="Product requirements stay linked to automated and human checks.">
-        <button className="button quiet" type="button"><RefreshCw aria-hidden="true" />Last run</button><button className="button primary" type="button" onClick={() => void runTests()} disabled={running}>{running ? <LoaderCircle className="spin" aria-hidden="true" /> : <Play aria-hidden="true" />}{running ? "Running tests" : "Run all tests"}</button>
+      <SurfaceHeader
+        eyebrow="03 / Verify"
+        title="Evidence before confidence."
+        description="Project configuration checks"
+      >
+        <button
+          className="button quiet"
+          disabled={!results && !verified}
+          onClick={() =>
+            downloadFile(
+              "verification.json",
+              JSON.stringify(
+                {
+                  version: state.version,
+                  scope: "Local configuration only",
+                  results: results || checks,
+                },
+                null,
+                2,
+              ),
+              "application/json",
+            )
+          }
+        >
+          <Download />
+          Export evidence
+        </button>
+        <button className="button primary" onClick={run}>
+          <Play />
+          Run all checks
+        </button>
       </SurfaceHeader>
-      <div className="test-summary"><div className="test-score"><span>{running ? "…" : "34"}</span><p><strong>{running ? "Running" : "Passed"}</strong><small>of 34 checks</small></p></div><div><span>Coverage</span><strong>87.4%</strong><i><em style={{ width: "87.4%" }} /></i></div><div><span>Requirements</span><strong>12 / 12</strong><i><em style={{ width: "100%" }} /></i></div><div><span>Duration</span><strong>{running ? "Running" : "42.8s"}</strong><small>3 browsers · 6 viewports</small></div></div>
-      <div className="test-layout"><aside className="test-suites"><div className="suite-heading"><span>Test suites</span><button type="button"><Plus aria-hidden="true" /></button></div>{[["All checks",34],["Acceptance",12],["Browser flows",8],["API contracts",6],["Accessibility",5],["Agent evaluations",3]].map(([name,count],index) => <button type="button" key={name} className={index === 0 ? "is-active" : ""}><span>{index === 0 ? <FlaskConical aria-hidden="true" /> : <TestTube2 aria-hidden="true" />}{name}</span><small>{count}</small></button>)}</aside><section className="test-results"><header><div><strong>All checks</strong><span>Last run 8 minutes ago</span></div><div><button type="button">Status: all</button><button type="button">Latest first</button></div></header>{[["User can filter the priority queue","Acceptance · Chromium","1.8s"],["Urgent ticket opens triage evidence","Browser flow · 3 browsers","4.2s"],["Low confidence requires approval","Agent evaluation · 8 cases","12.6s"],["Ticket contract accepts nullable assignee","API contract · POST /tickets","680ms"],["Queue remains usable at 390px","Responsive · Mobile","2.1s"],["Keyboard user can assign a ticket","Accessibility · WCAG AA","3.4s"]].map((test,index) => <article key={test[0]} className={running && index === 2 ? "is-running" : ""}><span className="test-result-icon">{running && index === 2 ? <LoaderCircle className="spin" aria-hidden="true" /> : <Check aria-hidden="true" />}</span><p><strong>{test[0]}</strong><small>{test[1]}</small></p><time>{running && index === 2 ? "Running" : test[2]}</time><button type="button"><ChevronRight aria-hidden="true" /></button></article>)}</section><aside className="test-evidence"><div className="aside-heading"><span><Gauge aria-hidden="true" />Evidence</span><button type="button"><MoreHorizontal aria-hidden="true" /></button></div><div className="evidence-preview"><div className="mini-browser"><span /><span /><span /></div><div><i /><i /><i /></div></div><p><strong>Priority queue at 1440px</strong><small>Screenshot from the latest Chromium run.</small></p><dl><div><dt>Requirement</dt><dd>AC-03</dd></div><div><dt>Commit</dt><dd><code>8e4c29a</code></dd></div><div><dt>Environment</dt><dd>Preview</dd></div></dl><button className="button secondary wide" type="button">Open trace</button></aside></div>
-      {runComplete && !running ? <div className="test-complete-banner"><CheckCircle2 aria-hidden="true" /><span><strong>All verification passed</strong><small>Evidence is attached to the current checkpoint.</small></span></div> : null}
+      <div className="metric-strip">
+        <div>
+          <span>Checks</span>
+          <strong>06</strong>
+          <small>Project configuration</small>
+        </div>
+        <div>
+          <span>Passed</span>
+          <strong className="positive">
+            {results
+              ? results.filter((item) => item.passed).length
+              : verified
+                ? "06"
+                : "--"}
+          </strong>
+          <small>
+            {verified ? `Verified at v${state.version}` : "Ready to run"}
+          </small>
+        </div>
+        <div>
+          <span>Browser tests</span>
+          <strong>--</strong>
+          <small>Runner not connected</small>
+        </div>
+        <div>
+          <span>Agent evaluations</span>
+          <strong>--</strong>
+          <small>Runtime not connected</small>
+        </div>
+      </div>
+      <div className="verification-layout">
+        <section>
+          <div className="tab-bar">
+            {["All checks", "Needs attention"].map((item) => (
+              <button
+                key={item}
+                className={filter === item ? "is-active" : ""}
+                onClick={() => setFilter(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+          {shown.length ? (
+            shown.map((item) => (
+              <div className="test-row" key={item.label}>
+                <span className={item.passed ? "positive" : "warning-text"}>
+                  {item.passed ? <CheckCircle2 /> : <Circle />}
+                </span>
+                <div>
+                  <strong>{item.label}</strong>
+                  <p>{item.detail}</p>
+                </div>
+                <span className="tag">{item.passed ? "Passed" : "Review"}</span>
+              </div>
+            ))
+          ) : (
+            <div className="empty-state">
+              <FlaskConical />
+              <h2>
+                {filter === "Needs attention" && verified
+                  ? "No configuration blockers"
+                  : "Ready for a check"}
+              </h2>
+              <p>
+                Run the project checks to collect evidence for this version.
+              </p>
+            </div>
+          )}
+        </section>
+        <aside className="evidence-aside">
+          <ShieldCheck />
+          <h2>Know what was verified</h2>
+          <p>
+            These checks inspect the saved configuration. They do not execute
+            your repository or validate a generated application.
+          </p>
+          <div className="resource-row">
+            <Code2 />
+            <span>Browser / API testing</span>
+            <span className="tag">Pending</span>
+          </div>
+          <button className="text-button" onClick={() => navigate("settings")}>
+            Configure integrations
+            <ArrowRight />
+          </button>
+        </aside>
+      </div>
+      <NextStep
+        title={
+          verified
+            ? "Prepare your change for review"
+            : "Resolve checks before review"
+        }
+        detail="Verification remains attached to this exact version."
+        action="Continue to review"
+        disabled={!verified}
+        onClick={() => navigate("git")}
+      />
     </div>
   );
 }
 
 export function GitSurface() {
-  const [connected, setConnected] = useState(true);
-  const [prCreated, setPrCreated] = useState(false);
+  const { project, state, update, log, notify, navigate } = useWorkspace();
+  const [tab, setTab] = useState("Changes");
+  const [title, setTitle] = useState(`Update ${project.name}`);
+  const ready = state.verifiedVersion === state.version;
+  const reviewed = state.reviewVersion === state.version;
+  function exportPR() {
+    downloadFile(
+      "pull-request.md",
+      `# ${title}\n\nBase: ${state.baseBranch}\nBranch: ${state.branch}\nVersion: ${state.version}\n\n${state.brief}\n\n## Verification\nLocal configuration checks ${ready ? "passed" : "pending"}. Repository tests have not run.\n`,
+    );
+    notify("Pull-request draft exported");
+  }
   return (
     <div className="surface-page">
-      <SurfaceHeader eyebrow="Source control" title="Git & pull request" description="Review exactly what changed and respect the repository's delivery policy.">
-        <button className="button quiet" type="button" onClick={() => setConnected((value) => !value)}><GitFork aria-hidden="true" />{connected ? "darshdevlab/relaydesk" : "Connect GitHub"}</button><button className="button primary" type="button" onClick={() => setPrCreated(true)}><GitPullRequest aria-hidden="true" />{prCreated ? "Pull request ready" : "Create pull request"}</button>
+      <SurfaceHeader
+        eyebrow="04 / Review"
+        title="Every change, accounted for."
+        description="Review the project and prepare a pull request"
+      >
+        <button className="button quiet" onClick={exportPR}>
+          <Download />
+          Export PR draft
+        </button>
+        <button
+          className="button primary"
+          disabled={!ready || reviewed}
+          onClick={() => {
+            update({ reviewVersion: state.version });
+            log("Change review approved", `Version ${state.version}`, "Review");
+            notify("Review approved for this version");
+          }}
+        >
+          <Check />
+          {reviewed ? "Review approved" : "Approve review"}
+        </button>
       </SurfaceHeader>
-      {!connected ? <div className="connect-empty"><span><GitFork aria-hidden="true" /></span><h2>Connect GitHub</h2><p>Install the Kova GitHub App, choose repositories and keep organization policy intact.</p><button className="button primary" type="button" onClick={() => setConnected(true)}>Connect GitHub <ArrowRight aria-hidden="true" /></button></div> : <><div className="git-context"><div><GitFork aria-hidden="true" /><span><strong>darshdevlab/relaydesk</strong><small>Synced 24 seconds ago</small></span></div><div><GitBranch aria-hidden="true" /><span><strong>feat/ai-triage-queue</strong><small>Based on main · protected</small></span></div><button type="button"><RefreshCw aria-hidden="true" />Sync</button></div><div className="git-layout"><section className="diff-panel"><header><div><span className="diff-count positive">+184</span><span className="diff-count negative">−32</span><strong>6 files changed</strong></div><button type="button">Stage all</button></header><div className="file-changes">{[["M","app/dashboard/page.tsx","+42 −8"],["M","components/ticket-queue.tsx","+68 −12"],["A","components/triage-panel.tsx","+46"],["M","lib/agents/triage.ts","+18 −6"],["A","tests/triage.spec.ts","+10"],["M","app/globals.css","+12 −6"]].map((file,index) => <button type="button" className={index === 1 ? "is-active" : ""} key={file[1]}><span className={file[0] === "A" ? "added" : "modified"}>{file[0]}</span><p><strong>{file[1]}</strong><small>{file[2]}</small></p><Check aria-hidden="true" /></button>)}</div><pre className="diff-view"><code><span className="diff-line context"><i>43</i><b>43</b>  return (</span><span className="diff-line context"><i>44</i><b>44</b>    &lt;section className=&quot;queue&quot;&gt;</span><span className="diff-line removed"><i>45</i><b> </b>-     &lt;TicketList tickets=&#123;tickets&#125; /&gt;</span><span className="diff-line added"><i> </i><b>45</b>+     &lt;TicketTable</span><span className="diff-line added"><i> </i><b>46</b>+       tickets=&#123;visibleTickets&#125;</span><span className="diff-line added"><i> </i><b>47</b>+       onSelect=&#123;openTriagePanel&#125;</span><span className="diff-line added"><i> </i><b>48</b>+     /&gt;</span><span className="diff-line context"><i>46</i><b>49</b>    &lt;/section&gt;</span></code></pre></section><aside className="pr-readiness"><div className="readiness-title"><span><ShieldCheck aria-hidden="true" /></span><p><strong>PR readiness</strong><small>Safe to request review</small></p><strong>92</strong></div>{[["Requirements linked","12 / 12"],["Checks passing","34 / 34"],["Secrets scan","No findings"],["Reviewers resolved","2 owners"],["Rollback prepared","Checkpoint #14"]].map((item) => <div className="pr-check" key={item[0]}><Check aria-hidden="true" /><span>{item[0]}</span><small>{item[1]}</small></div>)}<label className="field"><span>Commit message</span><input defaultValue="feat: add evidence-aware triage queue" /></label><div className="reviewer-list"><span>Required reviewers</span><div><i>AR</i><p><strong>Aryan Rao</strong><small>CODEOWNER · Frontend</small></p><Check aria-hidden="true" /></div><div><i>SK</i><p><strong>Sana Khan</strong><small>Agent platform</small></p><Clock3 aria-hidden="true" /></div></div><button className="button primary wide" type="button" onClick={() => setPrCreated(true)}>{prCreated ? <Check aria-hidden="true" /> : <GitPullRequest aria-hidden="true" />}{prCreated ? "PR #48 created" : "Create pull request"}</button>{prCreated ? <a href="#pr">Open pull request <ExternalLink aria-hidden="true" /></a> : null}</aside></div></>}
+      <div className="git-context">
+        <span>
+          <GitBranch />
+          {state.branch}
+        </span>
+        <ArrowRight />
+        <span>{state.baseBranch}</span>
+        <span className="tag">Local change set</span>
+      </div>
+      <div className="review-layout">
+        <section>
+          <div className="tab-bar">
+            {["Changes", "Branch policy"].map((item) => (
+              <button
+                className={tab === item ? "is-active" : ""}
+                key={item}
+                onClick={() => setTab(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+          {tab === "Changes" ? (
+            <div className="diff-content">
+              <div className="section-heading">
+                <span>
+                  <FileText size={16} /> project-specification.md
+                </span>
+                <span className="positive">
+                  +{state.requirements.length + 3}
+                </span>
+              </div>
+              <pre>
+                <code>
+                  <span>
+                    + # {project.name}
+                    {"\n"}
+                  </span>
+                  <span>
+                    + {state.brief}
+                    {"\n"}
+                  </span>
+                  <span>+ ## Acceptance criteria{"\n"}</span>
+                  {state.requirements.map((item, i) => (
+                    <span key={i}>
+                      + - {item}
+                      {"\n"}
+                    </span>
+                  ))}
+                </code>
+              </pre>
+              <div className="notice">
+                This change set contains the local specification. Connect a
+                repository to inspect real source diffs and create a GitHub PR.
+              </div>
+            </div>
+          ) : (
+            <div className="form-stack settings-section">
+              <label className="field">
+                <span>Branching strategy</span>
+                <select
+                  value={state.branchStrategy}
+                  onChange={(e) => update({ branchStrategy: e.target.value })}
+                >
+                  {["GitHub flow", "GitFlow", "Trunk-based", "Custom"].map(
+                    (item) => (
+                      <option key={item}>{item}</option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label className="field">
+                <span>Working branch</span>
+                <input
+                  value={state.branch}
+                  onChange={(e) =>
+                    update({
+                      branch: e.target.value,
+                      verifiedVersion: 0,
+                      reviewVersion: 0,
+                    })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Target branch</span>
+                <input
+                  value={state.baseBranch}
+                  onChange={(e) =>
+                    update({
+                      baseBranch: e.target.value,
+                      verifiedVersion: 0,
+                      reviewVersion: 0,
+                    })
+                  }
+                />
+              </label>
+              <div className="notice">
+                <ShieldCheck />
+                Changes to branch settings require verification again.
+              </div>
+            </div>
+          )}
+        </section>
+        <aside className="review-aside">
+          <h2>Review readiness</h2>
+          <div className="checklist">
+            <span>{ready ? <Check /> : <Circle />}Configuration verified</span>
+            <span>
+              {reviewed ? <Check /> : <Circle />}Change review approved
+            </span>
+            <span>
+              <Circle />
+              Repository connection
+            </span>
+          </div>
+          <label className="field">
+            <span>Pull-request title</span>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} />
+          </label>
+          <button className="button quiet wide" onClick={exportPR}>
+            <GitPullRequest />
+            Prepare pull request
+          </button>
+          <button className="text-button" onClick={() => navigate("settings")}>
+            Connect GitHub
+            <ArrowRight />
+          </button>
+        </aside>
+      </div>
+      <NextStep
+        title="Prepare the release"
+        detail="Carry this reviewed version forward with its verification record."
+        action="Continue to release"
+        disabled={!reviewed}
+        onClick={() => navigate("deploy")}
+      />
     </div>
   );
 }
 
 export function DeploySurface() {
-  const [deploying, setDeploying] = useState(false);
-  const [live, setLive] = useState(false);
-  async function deploy() { setDeploying(true); await new Promise((resolve) => window.setTimeout(resolve, 1200)); setDeploying(false); setLive(true); }
+  const { project, state, update, log, notify, navigate } = useWorkspace();
+  const [confirm, setConfirm] = useState(false);
+  const ready =
+    state.verifiedVersion === state.version &&
+    state.reviewVersion === state.version;
+  const released = state.releasedVersion === state.version;
+  function release() {
+    localStorage.setItem(
+      `kova:release:${project.id}:${state.version}`,
+      JSON.stringify({ project, state, createdAt: new Date().toISOString() }),
+    );
+    update({ releasedVersion: state.version });
+    log(
+      "Local release snapshot created",
+      `${state.environment}, version ${state.version}. No external deployment.`,
+      "Release",
+    );
+    setConfirm(false);
+    notify("Release snapshot saved. External deployment is not connected.");
+  }
   return (
     <div className="surface-page">
-      <SurfaceHeader eyebrow="Release control" title="Deploy" description="Promote the same verified artifact through preview, staging and production.">
-        <button className="button quiet" type="button"><Clock3 aria-hidden="true" />History</button><button className="button primary" type="button" onClick={() => void deploy()} disabled={deploying}>{deploying ? <LoaderCircle className="spin" aria-hidden="true" /> : <Rocket aria-hidden="true" />}{deploying ? "Deploying" : live ? "Redeploy" : "Deploy to production"}</button>
+      <SurfaceHeader
+        eyebrow="05 / Release"
+        title="Ready when you are."
+        description="A deliberate path from reviewed changes to release"
+      >
+        <button className="button quiet" onClick={() => navigate("settings")}>
+          <Link2 />
+          Connect hosting
+        </button>
+        <button
+          className="button primary"
+          disabled={!ready || released}
+          onClick={() => setConfirm(true)}
+        >
+          <Rocket />
+          {released ? "Snapshot created" : "Prepare release"}
+        </button>
       </SurfaceHeader>
-      <div className={`deployment-hero ${live ? "is-live" : ""}`}><div className="deployment-status-icon">{deploying ? <LoaderCircle className="spin" aria-hidden="true" /> : live ? <Check aria-hidden="true" /> : <Cloud aria-hidden="true" />}</div><div><span>{deploying ? "Production deployment running" : live ? "Production is live" : "Ready for production"}</span><h2>relaydesk.kova.app</h2><p>{live ? "Deployed just now from feat/ai-triage-queue" : "All required checks and approvals are complete."}</p></div><a href="#live">Open application <ExternalLink aria-hidden="true" /></a></div>
-      <div className="environment-rail"><div className="environment-card"><header><span><i />Preview</span><small>Automatic</small></header><strong>relaydesk-git-ai-triage.kova-preview.app</strong><p>Latest commit · 8e4c29a</p><footer><span>Ready · 8m ago</span><button type="button"><ExternalLink aria-hidden="true" /></button></footer></div><ArrowRight aria-hidden="true" /><div className="environment-card"><header><span><i />Staging</span><small>Approved</small></header><strong>staging.relaydesk.kova.app</strong><p>Release candidate · rc-24</p><footer><span>Healthy · 6m ago</span><button type="button"><ExternalLink aria-hidden="true" /></button></footer></div><ArrowRight aria-hidden="true" /><div className={`environment-card production ${live ? "is-live" : ""}`}><header><span><i />Production</span><small>Manual gate</small></header><strong>relaydesk.kova.app</strong><p>{live ? "Release 1.8.0 · current" : "Release 1.7.4 · current"}</p><footer><span>{live ? "Live · just now" : "Healthy · Sep 22"}</span><button type="button"><ExternalLink aria-hidden="true" /></button></footer></div></div>
-      <div className="deploy-grid"><section className="release-checklist"><div className="aside-heading"><span><ShieldCheck aria-hidden="true" />Production readiness</span><strong>7 / 7</strong></div>{[["Build artifact","Immutable · rc-24"],["Automated tests","34 passed"],["QA approval","Sana Khan"],["Security scan","No findings"],["Environment variables","12 configured"],["Database migration","Backward compatible"],["Rollback plan","Checkpoint #14"]].map((item) => <div key={item[0]}><Check aria-hidden="true" /><p><strong>{item[0]}</strong><small>{item[1]}</small></p><ChevronRight aria-hidden="true" /></div>)}</section><section className="deployment-settings"><div className="aside-heading"><span><Settings aria-hidden="true" />Deployment settings</span><button type="button">Edit</button></div><dl><div><dt>Provider</dt><dd>Vercel</dd></div><div><dt>Region</dt><dd>Washington, D.C. · iad1</dd></div><div><dt>Framework</dt><dd>Next.js 16</dd></div><div><dt>Build command</dt><dd><code>npm run build</code></dd></div><div><dt>Production branch</dt><dd><code>main</code></dd></div></dl><div className="domain-row"><Globe2 aria-hidden="true" /><p><strong>Custom domain</strong><small>relaydesk.kova.app · SSL active</small></p><Check aria-hidden="true" /></div></section><section className="observability-card"><div className="aside-heading"><span><Gauge aria-hidden="true" />Release health</span><span className="health-live"><i />Live</span></div><div className="health-score"><strong>99.98%</strong><span>Uptime · 30 days</span></div><div className="health-chart" aria-hidden="true">{[42,38,46,44,58,52,60,56,64,62,70,66,74,72,78,76,82,80,86,84].map((height,index) => <i key={index} style={{ height: `${height}%` }} />)}</div><div className="health-stats"><span><strong>184ms</strong>p95 latency</span><span><strong>0.08%</strong>Error rate</span></div></section></div>
+      <div className="release-status">
+        <span className="release-symbol">
+          <Rocket />
+        </span>
+        <div>
+          <span className="eyebrow">
+            {released ? "Snapshot saved" : "Release readiness"}
+          </span>
+          <h2>
+            {released
+              ? `Version ${state.version} is packaged`
+              : ready
+                ? "Your reviewed version is ready"
+                : "Two checks before release"}
+          </h2>
+          <p>
+            {released
+              ? "Your project snapshot is available to export."
+              : "Verify the configuration and approve the change review."}
+          </p>
+        </div>
+        <span className="tag">Local prototype</span>
+      </div>
+      <div className="environment-rail">
+        {["Preview", "Staging", "Production"].map((env, i) => (
+          <button
+            key={env}
+            className={`environment-card ${state.environment === env ? "is-active" : ""}`}
+            onClick={() => update({ environment: env })}
+          >
+            <div>
+              <span className="number-label">0{i + 1}</span>
+              <span>{state.environment === env ? <Check /> : <Circle />}</span>
+            </div>
+            <h2>{env}</h2>
+            <p>
+              {env === "Preview"
+                ? "Review with your team"
+                : env === "Staging"
+                  ? "Validate the release candidate"
+                  : "Deliver to your users"}
+            </p>
+            <footer>
+              {state.environment === env
+                ? "Selected environment"
+                : "Select environment"}
+              <ArrowRight />
+            </footer>
+          </button>
+        ))}
+      </div>
+      <div className="release-grid">
+        <section>
+          <div className="section-heading">
+            <h2>Release checklist</h2>
+            <ShieldCheck />
+          </div>
+          {[
+            {
+              label: "Configuration checks",
+              done: state.verifiedVersion === state.version,
+              view: "tests" as const,
+            },
+            {
+              label: "Change review",
+              done: state.reviewVersion === state.version,
+              view: "git" as const,
+            },
+            {
+              label: "Hosting provider",
+              done: false,
+              view: "settings" as const,
+            },
+          ].map((item) => (
+            <button
+              className="checklist-action"
+              key={item.label}
+              onClick={() => navigate(item.view)}
+            >
+              {item.done ? <CheckCircle2 className="positive" /> : <Circle />}
+              <span>
+                {item.label}
+                <small>{item.done ? "Complete" : "Needs setup"}</small>
+              </span>
+              <ArrowRight />
+            </button>
+          ))}
+        </section>
+        <section>
+          <div className="section-heading">
+            <h2>Release details</h2>
+            <Globe />
+          </div>
+          <dl className="details-list">
+            <div>
+              <dt>Project</dt>
+              <dd>{project.name}</dd>
+            </div>
+            <div>
+              <dt>Version</dt>
+              <dd>v{state.version}</dd>
+            </div>
+            <div>
+              <dt>Target</dt>
+              <dd>{state.environment}</dd>
+            </div>
+            <div>
+              <dt>Public URL</dt>
+              <dd>Not deployed</dd>
+            </div>
+          </dl>
+          {released && (
+            <button
+              className="button quiet wide"
+              onClick={() =>
+                downloadFile(
+                  `${project.name}-release-v${state.version}.json`,
+                  JSON.stringify(
+                    { project, state, scope: "Local prototype snapshot" },
+                    null,
+                    2,
+                  ),
+                  "application/json",
+                )
+              }
+            >
+              <Download />
+              Download release
+            </button>
+          )}
+        </section>
+      </div>
+      {released && (
+        <NextStep
+          title="Keep improving"
+          detail="Start the next change with this release preserved in your activity history."
+          action="Back to build"
+          onClick={() => navigate("build")}
+        />
+      )}
+      {confirm && (
+        <Modal
+          title={`Prepare ${state.environment.toLowerCase()} release`}
+          close={() => setConfirm(false)}
+        >
+          <p>
+            Save version {state.version} with its review and verification
+            record. This creates a local snapshot; it does not publish an
+            external app.
+          </p>
+          <button className="button primary wide" onClick={release}>
+            Create release snapshot
+            <Check />
+          </button>
+        </Modal>
+      )}
     </div>
   );
 }
 
 export function ActivitySurface() {
-  return <div className="surface-page narrow"><SurfaceHeader eyebrow="Project timeline" title="Activity" description="Every decision, build, approval and release is preserved with evidence." /><div className="timeline-filters"><button className="is-active" type="button">All activity</button><button type="button">Builds</button><button type="button">Approvals</button><button type="button">Deployments</button></div><section className="activity-timeline">{[["Deployment ready for production","Kova verified 34 checks and assembled the release artifact.","Just now",Rocket,"success"],["Pull request #48 created","feat/ai-triage-queue is awaiting one agent-platform review.","6 min ago",GitPullRequest,"blue"],["Build completed","The triage panel and evidence states changed across 6 files.","12 min ago",Sparkles,"agent"],["Plan approved","Darsh approved PRD v3 and twelve acceptance criteria.","31 min ago",Check,"success"],["Figma source synchronized","Eight components matched; one token difference needs review.","48 min ago",Layers3,"warning"],["Repository imported","Kova detected Next.js, Supabase and the protected main branch.","Yesterday",GitFork,"default"]].map(([title,copy,time,Icon,tone]) => { const TimelineIcon = Icon as typeof Activity; return <article key={title as string}><span className={`timeline-icon ${tone}`}><TimelineIcon aria-hidden="true" /></span><div><h2>{title as string}</h2><p>{copy as string}</p><time>{time as string}</time></div><button type="button"><ChevronRight aria-hidden="true" /></button></article>; })}</section></div>;
+  const { state, navigate } = useWorkspace();
+  const [filter, setFilter] = useState("All activity");
+  const entries = state.activities.filter(
+    (entry) => filter === "All activity" || entry.category === filter,
+  );
+  return (
+    <div className="surface-page">
+      <SurfaceHeader
+        eyebrow="Project history"
+        title="The story of your build."
+        description="Decisions and changes, in one place"
+      >
+        <button
+          className="button quiet"
+          onClick={() =>
+            downloadFile(
+              "activity.json",
+              JSON.stringify(state.activities, null, 2),
+              "application/json",
+            )
+          }
+        >
+          <Download />
+          Export history
+        </button>
+      </SurfaceHeader>
+      <div className="tab-bar">
+        {["All activity", "Build", "Verification", "Review", "Release"].map(
+          (item) => (
+            <button
+              key={item}
+              className={filter === item ? "is-active" : ""}
+              onClick={() => setFilter(item)}
+            >
+              {item}
+            </button>
+          ),
+        )}
+      </div>
+      <div className="activity-timeline">
+        {entries.map((entry) => (
+          <article key={entry.id}>
+            <span className="timeline-icon">
+              <Activity />
+            </span>
+            <div>
+              <span className="eyebrow">{entry.category}</span>
+              <h2>{entry.title}</h2>
+              <p>{entry.detail}</p>
+            </div>
+            <time>
+              {new Date(entry.time).toLocaleString(undefined, {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </time>
+          </article>
+        ))}
+      </div>
+      {!entries.length && (
+        <div className="empty-state">
+          <Activity />
+          <h2>No activity yet</h2>
+          <p>Your saved changes and decisions will appear here.</p>
+          <button className="button quiet" onClick={() => navigate("build")}>
+            Continue building
+            <ArrowRight />
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function SettingsSurface() {
-  const [openRouter, setOpenRouter] = useState(false);
-  return <div className="surface-page"><SurfaceHeader eyebrow="Project configuration" title="Settings" description="Manage models, connections, environments and team policy." /><div className="settings-layout"><aside className="settings-nav">{[["General",Settings],["Models & providers",Sparkles],["Integrations",Link2],["Environment",KeyRound],["Members",Users],["Security",ShieldCheck],["Webhooks",Webhook]].map(([label,Icon],index) => { const SettingsIcon = Icon as typeof Settings; return <button type="button" key={label as string} className={index === 1 ? "is-active" : ""}><SettingsIcon aria-hidden="true" />{label as string}</button>; })}</aside><section className="settings-content"><div className="settings-title"><div><h2>Models & providers</h2><p>Choose Kova-managed models or securely connect your own provider account.</p></div><span className="policy-badge"><ShieldCheck aria-hidden="true" />Workspace policy active</span></div><div className="provider-section"><div className="provider-section-heading"><div><h3>Kova model access</h3><p>Included with Kova credits. Auto routes each task to an approved model.</p></div><label className="toggle-row compact"><span>Enabled</span><input type="checkbox" defaultChecked /><i /></label></div><div className="model-policy-grid"><div><span><Zap aria-hidden="true" /></span><p><strong>Fast tasks</strong><small>UI copy, small edits, search</small></p><em>GPT-6 Luna</em></div><div><span><Code2 aria-hidden="true" /></span><p><strong>Build tasks</strong><small>Frontend, backend and debugging</small></p><em>GPT-6 Sol</em></div><div><span><Network aria-hidden="true" /></span><p><strong>Deep tasks</strong><small>Architecture and complex review</small></p><em>Claude Opus 5.5</em></div></div></div><div className="provider-section"><div className="provider-section-heading"><div><h3>Bring your own key</h3><p>Provider credentials stay encrypted and never reach the browser.</p></div><button className="button secondary" type="button"><Plus aria-hidden="true" />Add provider</button></div><div className="provider-list"><div><span className="provider-logo openrouter">OR</span><p><strong>OpenRouter</strong><small>{openRouter ? "Connected · 80 models available" : "One key for multiple model families"}</small></p>{openRouter ? <span className="connected-label"><Check aria-hidden="true" />Connected</span> : <button type="button" onClick={() => setOpenRouter(true)}>Connect</button>}</div><div><span className="provider-logo">AI</span><p><strong>OpenAI</strong><small>Direct provider connection</small></p><button type="button">Connect</button></div><div><span className="provider-logo anthropic">A</span><p><strong>Anthropic</strong><small>Direct provider connection</small></p><button type="button">Connect</button></div><div><span className="provider-logo google">G</span><p><strong>Google AI</strong><small>Direct provider connection</small></p><button type="button">Connect</button></div></div></div><div className="provider-section"><div className="provider-section-heading"><div><h3>Routing policy</h3><p>Controls applied whenever the composer uses Auto.</p></div><button type="button" className="text-button">Edit policy</button></div><div className="policy-rows"><div><p><strong>Prefer regional processing</strong><small>Use providers allowed for the workspace region</small></p><Check aria-hidden="true" /></div><div><p><strong>Fallback on model failure</strong><small>Retry once with the approved equivalent model</small></p><Check aria-hidden="true" /></div><div><p><strong>Maximum build budget</strong><small>Stop and ask before a run exceeds $2.00</small></p><span>$2.00</span></div></div></div></section></div></div>;
+  const { project, state, update, log, notify } = useWorkspace();
+  const [tab, setTab] = useState("Integrations");
+  const [connection, setConnection] = useState("");
+  const [resource, setResource] = useState("");
+  const [memberEmail, setMemberEmail] = useState("");
+  const [memberRole, setMemberRole] = useState("Editor");
+  const [invite, setInvite] = useState(false);
+  const [theme, setTheme] = useState(
+    () => document.documentElement.dataset.theme || "dark",
+  );
+  const [envName, setEnvName] = useState("");
+  const [mockValue, setMockValue] = useState("");
+  const [envs, setEnvs] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(
+        localStorage.getItem(`kova:mocks:${project.id}`) || "{}",
+      );
+    } catch {
+      return {};
+    }
+  });
+  function saveMock() {
+    if (!/^[A-Z_][A-Z0-9_]*$/.test(envName)) {
+      notify("Use an uppercase variable name such as API_URL");
+      return;
+    }
+    const next = { ...envs, [envName]: mockValue };
+    setEnvs(next);
+    localStorage.setItem(`kova:mocks:${project.id}`, JSON.stringify(next));
+    setEnvName("");
+    setMockValue("");
+    notify("Mock variable saved on this device");
+  }
+  return (
+    <div className="surface-page">
+      <SurfaceHeader
+        eyebrow="Workspace controls"
+        title="Settings"
+        description="Connections, people, and project preferences"
+      />
+      <div className="settings-layout">
+        <nav className="settings-nav" aria-label="Settings sections">
+          {[
+            { name: "Integrations", icon: Link2 },
+            { name: "Models", icon: Bot },
+            { name: "Environment", icon: KeyRound },
+            { name: "Members", icon: Users },
+            { name: "Appearance", icon: Settings },
+          ].map(({ name, icon: Icon }) => (
+            <button
+              key={name}
+              className={tab === name ? "is-active" : ""}
+              onClick={() => setTab(name)}
+            >
+              <Icon />
+              {name}
+            </button>
+          ))}
+        </nav>
+        <section className="settings-content">
+          <h2>{tab}</h2>
+          {tab === "Integrations" && (
+            <>
+              <p className="muted">
+                Add resource references to your project. OAuth authorization and
+                live synchronization are not connected.
+              </p>
+              <div className="integration-grid">
+                {[
+                  "GitHub",
+                  "Figma",
+                  "Jira",
+                  "ClickUp",
+                  "Linear",
+                  "Supabase",
+                  "Vercel",
+                  "Custom API",
+                ].map((name) => (
+                  <article className="integration-item" key={name}>
+                    <span className="integration-logo">{name.slice(0, 2)}</span>
+                    <div>
+                      <h3>{name}</h3>
+                      <p>
+                        {state.connections.some((item) =>
+                          item.startsWith(`${name}:`),
+                        )
+                          ? "Reference attached"
+                          : "Not connected"}
+                      </p>
+                    </div>
+                    <button
+                      className="icon-button ghost"
+                      aria-label={`Configure ${name}`}
+                      onClick={() => {
+                        setConnection(name);
+                        setResource("");
+                      }}
+                    >
+                      <Plus />
+                    </button>
+                  </article>
+                ))}
+              </div>
+              {state.connections.map((item) => (
+                <div className="resource-row" key={item}>
+                  <Link2 />
+                  <span>{item}</span>
+                  <button
+                    className="icon-button ghost"
+                    aria-label={`Remove ${item}`}
+                    onClick={() =>
+                      update({
+                        connections: state.connections.filter(
+                          (value) => value !== item,
+                        ),
+                      })
+                    }
+                  >
+                    <X />
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+          {tab === "Models" && (
+            <>
+              <p className="muted">
+                Choose models in the build composer. OpenRouter requests use a
+                server-side key when configured.
+              </p>
+              <div className="setting-row">
+                <span>
+                  <strong>Automatic routing</strong>
+                  <small>Use the configured server default model</small>
+                </span>
+                <span className="tag">Default routing</span>
+              </div>
+              {["OpenRouter", "OpenAI", "Anthropic", "Google"].map((name) => (
+                <div className="setting-row" key={name}>
+                  <span>
+                    <strong>{name}</strong>
+                    <small>
+                      {name === "OpenRouter"
+                        ? "Server environment: OPENROUTER_API_KEY"
+                        : "Direct provider integration pending"}
+                    </small>
+                  </span>
+                  <span className="tag">
+                    {name === "OpenRouter" ? "Key required" : "Not connected"}
+                  </span>
+                </div>
+              ))}
+              <div className="notice">
+                <KeyRound />
+                Provider keys must be configured on the server. Do not store
+                live keys in project notes or mock variables.
+              </div>
+            </>
+          )}
+          {tab === "Environment" && (
+            <>
+              <p className="muted">
+                Define mock values for isolated local planning. Real secrets
+                need an encrypted server vault.
+              </p>
+              <form
+                className="form-stack"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  saveMock();
+                }}
+              >
+                <label className="field">
+                  <span>Variable name</span>
+                  <input
+                    value={envName}
+                    onChange={(e) => setEnvName(e.target.value)}
+                    placeholder="API_URL"
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span>Mock value (non-secret)</span>
+                  <input
+                    value={mockValue}
+                    onChange={(e) => setMockValue(e.target.value)}
+                    placeholder="https://example.test"
+                    required
+                  />
+                </label>
+                <button className="button quiet" type="submit">
+                  <Plus />
+                  Add mock variable
+                </button>
+              </form>
+              {Object.entries(envs).map(([name, value]) => (
+                <div className="resource-row" key={name}>
+                  <code>{name}</code>
+                  <span>{value}</span>
+                  <button
+                    className="icon-button ghost"
+                    aria-label={`Remove ${name}`}
+                    onClick={() => {
+                      const next = { ...envs };
+                      delete next[name];
+                      setEnvs(next);
+                      localStorage.setItem(
+                        `kova:mocks:${project.id}`,
+                        JSON.stringify(next),
+                      );
+                    }}
+                  >
+                    <Trash2 />
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+          {tab === "Members" && (
+            <>
+              <p className="muted">
+                Plan workspace roles. Invitations are saved as drafts; no email
+                is sent and no access is granted.
+              </p>
+              <button className="button quiet" onClick={() => setInvite(true)}>
+                <Plus />
+                Draft invitation
+              </button>
+              {state.members.map((member) => (
+                <div className="setting-row" key={member.email}>
+                  <span>
+                    <strong>{member.email}</strong>
+                    <small>
+                      {member.role === "Owner"
+                        ? "Project owner"
+                        : "Invitation draft"}
+                    </small>
+                  </span>
+                  <span className="tag">{member.role}</span>
+                </div>
+              ))}
+            </>
+          )}
+          {tab === "Appearance" && (
+            <>
+              <p className="muted">Choose your workspace appearance.</p>
+              <div className="theme-options">
+                {["dark", "light"].map((value) => (
+                  <button
+                    key={value}
+                    className={`theme-option ${value} ${theme === value ? "selected" : ""}`}
+                    onClick={() => {
+                      setTheme(value);
+                      document.documentElement.dataset.theme = value;
+                      localStorage.setItem("kova:theme:v2", value);
+                    }}
+                  >
+                    <span className="theme-sample">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                    <strong>{value === "dark" ? "Graphite" : "Silver"}</strong>
+                    {theme === value && <Check />}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+      {connection && (
+        <Modal
+          title={`Add ${connection} reference`}
+          close={() => setConnection("")}
+        >
+          <form
+            className="form-stack"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const value = `${connection}: ${resource}`;
+              update({
+                connections: [
+                  ...state.connections.filter((item) => item !== value),
+                  value,
+                ],
+                context: [...new Set([...state.context, value])],
+              });
+              log("Resource reference attached", connection, "Resources");
+              setConnection("");
+              notify("Reference saved. Live access is not connected.");
+            }}
+          >
+            <label className="field">
+              <span>Resource URL</span>
+              <input
+                type="url"
+                required
+                value={resource}
+                onChange={(e) => setResource(e.target.value)}
+                placeholder="https://..."
+              />
+            </label>
+            <button className="button primary" type="submit">
+              Attach reference
+              <Link2 />
+            </button>
+          </form>
+        </Modal>
+      )}
+      {invite && (
+        <Modal title="Draft invitation" close={() => setInvite(false)}>
+          <form
+            className="form-stack"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (state.members.some((item) => item.email === memberEmail)) {
+                notify("This person is already listed");
+                return;
+              }
+              update({
+                members: [
+                  ...state.members,
+                  { email: memberEmail, role: memberRole },
+                ],
+              });
+              setInvite(false);
+              notify("Invitation draft saved. No email was sent.");
+            }}
+          >
+            <label className="field">
+              <span>Email</span>
+              <input
+                required
+                type="email"
+                value={memberEmail}
+                onChange={(e) => setMemberEmail(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>Role</span>
+              <select
+                value={memberRole}
+                onChange={(e) => setMemberRole(e.target.value)}
+              >
+                <option>Editor</option>
+                <option>Reviewer</option>
+                <option>Viewer</option>
+              </select>
+            </label>
+            <button className="button primary" type="submit">
+              Save invitation draft
+              <Check />
+            </button>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
 }

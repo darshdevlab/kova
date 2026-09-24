@@ -26,7 +26,6 @@ export async function GET() {
     const payload = (await response.json()) as { data?: OpenRouterModel[] };
     const models = (payload.data ?? [])
       .filter((model) => !model.id.includes(":batch"))
-      .slice(0, 80)
       .map((model) => ({
         id: model.id,
         name: model.name ?? model.id,
@@ -37,7 +36,10 @@ export async function GET() {
         speed: "Balanced" as const,
       }));
 
-    return Response.json({ models: [FALLBACK_MODELS[0], ...models], live: true });
+    return Response.json({
+      models: [FALLBACK_MODELS[0], ...models],
+      live: true,
+    });
   } catch {
     return Response.json({ models: FALLBACK_MODELS, live: false });
   }

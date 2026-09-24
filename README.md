@@ -1,63 +1,64 @@
 # Kova
 
-Kova is an Architect 2.0 product prototype for both non-technical builders and developers. It keeps intent, implementation, verification, source control, and release evidence in one workspace.
+An Architect 2.0 assignment prototype for guided application building and developer workflows. The current revision redesigns the application around Graphite/Jade, a shared project lifecycle, and persistent local interactions.
 
-## Product flows
-
-- Authentication with Supabase-ready email access and a credential-free demo workspace
-- Prompt-first project creation, repository import, templates, and work-item context
-- Guided and Developer workspace depths without splitting the product into two tools
-- Build chat with live OpenRouter model discovery, manual model selection, and automatic routing
-- Interactive app preview, code explorer, and Context Lens for selecting an exact UI element
-- Living PRD, architecture, personas, acceptance criteria, and decision history
-- Visual agent workflow with model, tool, knowledge, and guardrail configuration
-- Managed data, row-level security, and authentication design surfaces
-- Requirement-linked browser, API, accessibility, and agent evaluation evidence
-- Git diff, branch policy, reviewer readiness, and pull-request flow
-- Preview, staging, production, rollback, environment, and release-health flow
-- Activity timeline and bring-your-own-model provider settings
-
-## Run locally
+## Run
 
 ```bash
 npm install
-cp .env.example .env.local
-npm run dev
+npm run dev -- --hostname 127.0.0.1 --port 3100
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Without environment variables, Kova runs in a deterministic demo mode and every major product flow remains usable.
+- Application: http://127.0.0.1:3100
+- Current design system: http://127.0.0.1:3100/design-system
+- Enter through **Continue with demo workspace** when authentication is not configured.
 
-## Environment
+## What works locally
 
-```bash
+- Project creation, search, source filters, templates, archive/restore.
+- Saved product brief, acceptance criteria, plan approval, PRD export.
+- Persistent conversation and drafts, searchable model catalog, prompt reuse, copy, stop/retry, failure recovery.
+- Context Lens selection and scoped prompts; attachment references (not file ingestion).
+- Interactive sample preview with overview, ticket resolution, customers, and knowledge routes.
+- Editable source draft and export (not connected to the sample preview).
+- Editable React Flow graph: nodes, connections, per-node instructions, graph validation, persistence.
+- Local table/row management and desired authentication configuration.
+- Real checks of six saved configuration conditions, with review invalidation when relevant inputs change.
+- Branch configuration, exportable PR draft, local review gate, and release snapshot/export.
+- Activity history, connection references, invitation drafts, mock variables, theme settings, navigation search.
+- Desktop and mobile versions of every implemented screen.
+
+## Integration boundaries
+
+This is not a completed production platform. The [338-entry implementation audit](docs/FEATURE-COVERAGE.md) records working local, partial, and pending capabilities individually. A visible flow is not proof that its external service is implemented.
+
+Repository cloning, isolated command execution, generated applications, external tests, real PR creation, hosting deployment, live collaboration, encrypted provider-key management, and most inherited integrations remain pending. The preview is a sample application. Local configuration checks do not run repository tests. A local release snapshot does not deploy anything.
+
+The existing Supabase email adapter requires a configured project and live verification. The OpenRouter route can request model text with a server key, but it has no file-editing, test-running, or deployment tools. The model must not claim these actions.
+
+```dotenv
 OPENROUTER_API_KEY=
-OPENROUTER_DEFAULT_MODEL=openai/gpt-6-sol
+OPENROUTER_DEFAULT_MODEL=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ```
 
-`OPENROUTER_API_KEY` is only read in the server route. Provider keys never reach the browser. Apply [`supabase/schema.sql`](./supabase/schema.sql) to a dedicated Supabase project before enabling persistent accounts and project data.
+Do not store real secrets in local mock variables. No server credentials are committed.
 
-## Quality checks
+## Design and verification
+
+- [Graphite design rules](docs/DESIGN-SYSTEM-V2.md)
+- [Feature coverage](docs/FEATURE-COVERAGE.md)
+- Visual evidence: `artifacts/redesign/` (local, gitignored)
+- Project thumbnail images: `public/previews/` (captured from the actual sample UI)
 
 ```bash
-npm run typecheck
 npm run lint
+npm run typecheck
 npm run build
 npm run test:e2e
 ```
 
-Playwright covers authentication, project entry, prompt execution, Context Lens, agent workflow, tests, pull-request creation, deployment, and mobile navigation.
+The Playwright suite covers local creation-to-release, graph editing, data persistence, verification invalidation, model selection, prompt error recovery, and all workspace screens at desktop/mobile sizes. Model responses are fixtures in these browser tests; live provider behavior is not verified by them.
 
-## Stack
-
-- Next.js 16 App Router and React 19
-- TypeScript and Zod
-- Supabase Auth/Postgres readiness with RLS-first schema
-- OpenRouter model catalog and server-side chat route
-- Lucide icons and the Kova design system
-- Playwright end-to-end verification
-
-## Design system
-
-Kova uses a compact workbench language built around Deep Ink (`#171A1F`), Kova Ember (`#F1543F`), Action Blue (`#2F6FED`), and Canvas (`#F6F7F9`). Geist and Geist Mono provide the typography. Surfaces use 4-8px radii, restrained shadows, visible state, and progressive disclosure so the same product remains approachable in Guided mode and precise in Developer mode.
+Stack: Next.js 16, React 19, TypeScript, React Flow, Lucide, Supabase-ready adapter, OpenRouter text route, Playwright.

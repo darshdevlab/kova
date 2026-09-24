@@ -2,223 +2,465 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
-  Activity,
   Archive,
   ArrowRight,
-  Bell,
-  Boxes,
+  Box,
   Check,
-  ChevronDown,
-  Clock3,
   FileText,
-  FolderGit2,
-  GitFork,
-  Grid2X2,
+  GitBranch,
   LayoutTemplate,
-  ListFilter,
   LogOut,
   Moon,
+  MoreHorizontal,
   Plus,
   Search,
-  Settings,
   Sparkles,
   Sun,
-  X,
 } from "lucide-react";
-import { BrandMark } from "@/components/brand-mark";
-import { clearSession, readProjects, readSession, writeProjects } from "@/lib/storage";
-import type { KovaProject, KovaSession } from "@/lib/types";
+import { BrandMark } from "./brand-mark";
+import { Modal } from "./ui";
+import { clearSession, readProjects, writeProjects } from "@/lib/storage";
+import { initialWorkspace } from "@/lib/workspace-state";
+import type { KovaProject } from "@/lib/types";
 
-type CreateSource = "prompt" | "github" | "work" | "template";
-
-const CREATE_OPTIONS: Array<{
-  id: CreateSource;
-  label: string;
-  description: string;
-  icon: typeof Sparkles;
-}> = [
-  { id: "prompt", label: "Describe an idea", description: "Plan and build from a plain-language brief.", icon: Sparkles },
-  { id: "github", label: "Import repository", description: "Understand an existing codebase and continue safely.", icon: GitFork },
-  { id: "work", label: "Import requirement", description: "Start from Jira, ClickUp, Linear, Docs or a PRD.", icon: FileText },
-  { id: "template", label: "Use a template", description: "Clone a verified app, agent or workflow.", icon: LayoutTemplate },
-];
-
-function ProjectVisual({ accent }: { accent: KovaProject["accent"] }) {
-  return (
-    <div className={`project-visual ${accent}`} aria-hidden="true">
-      <div className="project-visual-bar"><i /><span /><span /></div>
-      <div className="project-visual-body">
-        <div className="project-visual-nav"><span /><span /><span /><span /></div>
-        <div className="project-visual-main">
-          <div className="project-visual-metrics"><i /><i /><i /></div>
-          <div className="project-visual-chart"><span /><span /><span /><span /><span /><span /></div>
-          <div className="project-visual-rows"><i /><i /><i /></div>
-        </div>
-      </div>
-    </div>
-  );
-}
+const OPTIONS = [
+  {
+    id: "Prompt",
+    title: "Start with an idea",
+    detail: "Describe the product you have in mind.",
+    icon: Sparkles,
+  },
+  {
+    id: "GitHub",
+    title: "Bring a repository",
+    detail: "Plan changes to an existing codebase.",
+    icon: GitBranch,
+  },
+  {
+    id: "Work item",
+    title: "Import a requirement",
+    detail: "Attach a PRD, design, or work item.",
+    icon: FileText,
+  },
+  {
+    id: "Template",
+    title: "Use a starting point",
+    detail: "Begin with an app or agent template.",
+    icon: LayoutTemplate,
+  },
+] as const;
 
 export function ProjectHub() {
   const router = useRouter();
   const [projects, setProjects] = useState<KovaProject[]>([]);
-  const [session, setSession] = useState<KovaSession | null>(null);
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("All sources");
+  const [section, setSection] = useState("Projects");
+  const [archived, setArchived] = useState<string[]>([]);
   const [showCreate, setShowCreate] = useState(false);
-  const [source, setSource] = useState<CreateSource>("prompt");
-  const [brief, setBrief] = useState("Build an operations workspace with AI-assisted triage and analytics.");
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-
+  const [source, setSource] = useState<KovaProject["source"]>("Prompt");
+  const [name, setName] = useState("");
+  const [brief, setBrief] = useState("");
+  const [url, setUrl] = useState("");
+  const [theme, setTheme] = useState("dark");
+  const [actions, setActions] = useState<KovaProject | null>(null);
   useEffect(() => {
-    const timer = window.setTimeout(() => {
+    const timer = setTimeout(() => {
       setProjects(readProjects());
-      setSession(readSession());
-      const saved = window.localStorage.getItem("kova:theme") === "dark" ? "dark" : "light";
+      try {
+        setArchived(JSON.parse(localStorage.getItem("kova:archived") || "[]"));
+      } catch {
+        setArchived([]);
+      }
+      const saved = localStorage.getItem("kova:theme:v2") || "dark";
       setTheme(saved);
       document.documentElement.dataset.theme = saved;
     }, 0);
-    return () => window.clearTimeout(timer);
+    return () => clearTimeout(timer);
   }, []);
-
   const filtered = useMemo(
-    () => projects.filter((project) => `${project.name} ${project.description}`.toLowerCase().includes(query.toLowerCase())),
-    [projects, query],
+    () =>
+      projects.filter(
+        (project) =>
+          `${project.name} ${project.description}`
+            .toLowerCase()
+            .includes(query.toLowerCase()) &&
+          (filter === "All sources" || project.source === filter) &&
+          (section === "Archived"
+            ? archived.includes(project.id)
+            : !archived.includes(project.id)),
+      ),
+    [projects, query, filter, archived, section],
   );
-
-  function toggleTheme() {
-    const next = theme === "light" ? "dark" : "light";
-    setTheme(next);
-    document.documentElement.dataset.theme = next;
-    window.localStorage.setItem("kova:theme", next);
-  }
-
   function createProject() {
-    const name =
-      source === "github"
-        ? "Imported service workspace"
-        : source === "work"
-          ? "Customer onboarding refresh"
-          : source === "template"
-            ? "Agent operations starter"
-            : "New product workspace";
-    const id = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString().slice(-4)}`;
+    const title = name.trim();
+    if (!title || !brief.trim()) return;
     const project: KovaProject = {
-      id,
-      name,
-      description: brief || "A new Kova project.",
+      id: `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${crypto.randomUUID().slice(0, 8)}`,
+      name: title,
+      description: brief.trim(),
       status: "Draft",
       updatedAt: "Just now",
-      source: source === "github" ? "GitHub" : source === "work" ? "Work item" : source === "template" ? "Template" : "Prompt",
-      mode: source === "github" ? "Developer" : "Guided",
-      accent: source === "github" ? "blue" : "ember",
-      progress: 18,
+      source,
+      mode: source === "GitHub" ? "Developer" : "Guided",
+      accent: "green",
+      progress: 0,
     };
-    const next = [project, ...projects];
-    setProjects(next);
-    writeProjects(next);
-    router.push(`/workspace/${id}`);
+    writeProjects([project, ...projects]);
+    const state = initialWorkspace(project);
+    if (url) {
+      state.context.push(`${source}: ${url}`);
+      state.connections.push(`${source}: ${url}`);
+    }
+    localStorage.setItem(
+      `kova:workspace:v2:${project.id}`,
+      JSON.stringify(state),
+    );
+    router.push(`/workspace/${project.id}?view=plan`);
   }
-
-  function signOut() {
-    clearSession();
-    router.push("/");
+  function toggleArchive(project: KovaProject) {
+    const next = archived.includes(project.id)
+      ? archived.filter((id) => id !== project.id)
+      : [...archived, project.id];
+    setArchived(next);
+    localStorage.setItem("kova:archived", JSON.stringify(next));
+    setActions(null);
   }
-
   return (
     <div className="app-page">
       <header className="product-topbar">
         <BrandMark />
         <nav className="topbar-nav" aria-label="Workspace">
-          <a className="is-active" href="#projects">Projects</a>
-          <a href="#templates">Templates</a>
-          <a href="#activity">Activity</a>
+          {["Projects", "Templates", "Archived"].map((item) => (
+            <button
+              key={item}
+              className={section === item ? "is-active" : ""}
+              onClick={() => setSection(item)}
+            >
+              {item}
+            </button>
+          ))}
         </nav>
         <div className="topbar-actions">
-          <button className="icon-button" type="button" aria-label="Notifications" title="Notifications"><Bell aria-hidden="true" /><span className="notification-dot" /></button>
-          <button className="icon-button" type="button" onClick={toggleTheme} aria-label="Toggle theme" title="Toggle theme">{theme === "light" ? <Moon aria-hidden="true" /> : <Sun aria-hidden="true" />}</button>
-          <button className="profile-button" type="button" title={session?.email ?? "Demo user"}><span>D</span><ChevronDown aria-hidden="true" /></button>
+          <span className="tag">Personal workspace</span>
+          <button
+            className="icon-button ghost"
+            title="Toggle theme"
+            aria-label="Toggle theme"
+            onClick={() => {
+              const next = theme === "dark" ? "light" : "dark";
+              setTheme(next);
+              document.documentElement.dataset.theme = next;
+              localStorage.setItem("kova:theme:v2", next);
+            }}
+          >
+            {theme === "dark" ? <Sun /> : <Moon />}
+          </button>
+          <button
+            className="icon-button ghost"
+            title="Sign out"
+            aria-label="Sign out"
+            onClick={() => {
+              clearSession();
+              router.push("/");
+            }}
+          >
+            <LogOut />
+          </button>
+          <span className="avatar">D</span>
         </div>
       </header>
-
-      <aside className="hub-sidebar" aria-label="Project navigation">
-        <button className="sidebar-action" type="button" onClick={() => setShowCreate(true)}><Plus aria-hidden="true" />New project</button>
-        <nav>
-          <a className="is-active" href="#projects"><Grid2X2 aria-hidden="true" />All projects<span>{projects.length}</span></a>
-          <a href="#recent"><Clock3 aria-hidden="true" />Recent</a>
-          <a href="#shared"><Boxes aria-hidden="true" />Shared with me</a>
-          <a href="#archived"><Archive aria-hidden="true" />Archived</a>
-        </nav>
-        <div className="sidebar-section-label">Workspace</div>
-        <nav>
-          <a href="#activity"><Activity aria-hidden="true" />Activity</a>
-          <a href="#settings"><Settings aria-hidden="true" />Settings</a>
-        </nav>
-        <div className="hub-sidebar-bottom">
-          <div className="workspace-usage"><div><span>Build credits</span><strong>72%</strong></div><i><span /></i><small>18,240 remaining</small></div>
-          <button className="sidebar-signout" type="button" onClick={signOut}><LogOut aria-hidden="true" />Sign out</button>
-        </div>
-      </aside>
-
-      <main className="hub-main" id="projects">
+      <main className="hub-main">
         <div className="hub-heading">
-          <div><span className="eyebrow">Darsh&apos;s workspace</span><h1>Projects</h1><p>Continue a build or start from an idea, requirement or repository.</p></div>
-          <button className="button primary" type="button" onClick={() => setShowCreate(true)}><Plus aria-hidden="true" />New project</button>
-        </div>
-
-        <div className="project-toolbar">
-          <label className="search-field"><Search aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects" /></label>
-          <button className="button quiet" type="button"><ListFilter aria-hidden="true" />All types<ChevronDown aria-hidden="true" /></button>
-          <span className="toolbar-count">{filtered.length} projects</span>
-        </div>
-
-        <section className="project-grid" aria-label="Projects">
-          <button className="new-project-card" type="button" onClick={() => setShowCreate(true)}>
-            <span><Plus aria-hidden="true" /></span><strong>Create a project</strong><small>Prompt, import or clone</small>
+          <div>
+            <span className="eyebrow">Your workspace</span>
+            <h1>
+              {section === "Templates"
+                ? "A head start on your next idea."
+                : section === "Archived"
+                  ? "Archived projects"
+                  : "Make something that matters."}
+            </h1>
+            <p>
+              {section === "Templates"
+                ? "Choose a starting point and make it yours."
+                : "Your ideas, builds, and next steps. All here."}
+            </p>
+          </div>
+          <button
+            className="button primary"
+            onClick={() => {
+              setShowCreate(true);
+              setSource("Prompt");
+            }}
+          >
+            <Plus />
+            New project
           </button>
-          {filtered.map((project) => (
-            <article className="project-card" key={project.id}>
-              <button type="button" className="project-open" onClick={() => router.push(`/workspace/${project.id}`)} aria-label={`Open ${project.name}`}>
-                <ProjectVisual accent={project.accent} />
-              </button>
-              <div className="project-card-body">
-                <div className="project-card-title"><div><h2>{project.name}</h2><span className={`status-badge ${project.status.toLowerCase()}`}><i />{project.status}</span></div><button className="icon-button ghost" type="button" aria-label={`More actions for ${project.name}`}>•••</button></div>
-                <p>{project.description}</p>
-                <div className="project-meta"><span>{project.source}</span><span>{project.mode}</span><time>{project.updatedAt}</time></div>
-              </div>
-            </article>
-          ))}
-        </section>
-
-        <section className="activity-strip" id="activity">
-          <div className="activity-strip-heading"><div><span className="eyebrow">Live workspace</span><h2>Needs your attention</h2></div><button className="button quiet" type="button">View activity<ArrowRight aria-hidden="true" /></button></div>
+        </div>
+        {section === "Templates" ? (
+          <>
+            <div className="hub-notice">
+              <LayoutTemplate />
+              Local starting points
+            </div>
+            <div className="project-grid">
+              {[
+                {
+                  title: "Support operations",
+                  brief:
+                    "A support workspace with ticket triage, customers, knowledge, and an AI assistant.",
+                },
+                {
+                  title: "Internal knowledge agent",
+                  brief:
+                    "An internal assistant that answers from approved documents with citations and human review.",
+                },
+                {
+                  title: "Customer onboarding",
+                  brief:
+                    "A customer onboarding portal with progress tracking, tasks, and team approvals.",
+                },
+              ].map((item) => (
+                <article className="project-card" key={item.title}>
+                  <div className="project-card-body">
+                    <Box className="positive" />
+                    <h2>{item.title}</h2>
+                    <p>{item.brief}</p>
+                    <button
+                      className="button quiet"
+                      onClick={() => {
+                        setSource("Template");
+                        setName(item.title);
+                        setBrief(item.brief);
+                        setShowCreate(true);
+                      }}
+                    >
+                      Use template
+                      <ArrowRight />
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="project-toolbar">
+              <label className="search-field">
+                <Search />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search projects"
+                  aria-label="Search projects"
+                />
+              </label>
+              <select
+                aria-label="Filter projects"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              >
+                <option>All sources</option>
+                {OPTIONS.map((option) => (
+                  <option key={option.id}>{option.id}</option>
+                ))}
+              </select>
+              <span className="toolbar-count">{filtered.length} projects</span>
+            </div>
+            <section className="project-grid" aria-label="Projects">
+              {filtered.map((project, index) => (
+                <article className="project-card" key={project.id}>
+                  <button
+                    className="project-open"
+                    onClick={() => router.push(`/workspace/${project.id}`)}
+                    aria-label={`Open ${project.name}`}
+                  >
+                    <Image
+                      src={`/previews/${index % 2 === 0 ? "application" : "workflow"}.png`}
+                      width={720}
+                      height={420}
+                      alt={`${project.name} sample workspace preview`}
+                      unoptimized
+                    />
+                  </button>
+                  <div className="project-card-body">
+                    <div className="project-card-title">
+                      <h2>{project.name}</h2>
+                      <button
+                        className="icon-button ghost"
+                        aria-label={`Actions for ${project.name}`}
+                        onClick={() => setActions(project)}
+                      >
+                        <MoreHorizontal />
+                      </button>
+                    </div>
+                    <p>{project.description}</p>
+                    <div className="project-meta">
+                      <span>{project.source}</span>
+                      <span
+                        className={`status-badge ${project.status.toLowerCase()}`}
+                      >
+                        <i />
+                        {project.status}
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              ))}
+              {!filtered.length && (
+                <div className="empty-state project-empty">
+                  <Search />
+                  <h2>No projects here</h2>
+                  <p>
+                    {section === "Archived"
+                      ? "Archived projects can be restored from this view."
+                      : "Try another search or start a new project."}
+                  </p>
+                </div>
+              )}
+            </section>
+          </>
+        )}
+        <section className="activity-strip">
+          <div className="activity-strip-heading">
+            <div>
+              <span className="eyebrow">Keep moving</span>
+              <h2>Your next steps</h2>
+            </div>
+            <span className="tag">Project shortcuts</span>
+          </div>
           <div className="attention-list">
-            <div><span className="attention-icon warning"><FileText aria-hidden="true" /></span><p><strong>Approve checkout acceptance criteria</strong><small>Checkout analytics · Product gate</small></p><button type="button">Review</button></div>
-            <div><span className="attention-icon agent"><Sparkles aria-hidden="true" /></span><p><strong>Triage evaluation reached 94%</strong><small>RelayDesk · 2 cases need review</small></p><button type="button">Inspect</button></div>
-            <div><span className="attention-icon success"><Check aria-hidden="true" /></span><p><strong>Production deployment completed</strong><small>Policy answer agent · 18 min ago</small></p><button type="button">Open</button></div>
+            {projects.slice(0, 3).map((project, index) => (
+              <button
+                key={project.id}
+                onClick={() =>
+                  router.push(
+                    `/workspace/${project.id}?view=${index === 0 ? "plan" : index === 1 ? "git" : "agents"}`,
+                  )
+                }
+              >
+                <span className="resource-icon">
+                  {index === 0 ? (
+                    <FileText />
+                  ) : index === 1 ? (
+                    <GitBranch />
+                  ) : (
+                    <Sparkles />
+                  )}
+                </span>
+                <div>
+                  <strong>
+                    {index === 0
+                      ? "Review the product brief"
+                      : index === 1
+                        ? "Configure your branch policy"
+                        : "Shape the agent workflow"}
+                  </strong>
+                  <small>{project.name}</small>
+                </div>
+                <ArrowRight />
+              </button>
+            ))}
           </div>
         </section>
       </main>
-
-      {showCreate ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setShowCreate(false); }}>
-          <section className="create-dialog" role="dialog" aria-modal="true" aria-labelledby="create-title">
-            <div className="dialog-header"><div><span className="eyebrow">Start a project</span><h2 id="create-title">What are you bringing to Kova?</h2></div><button className="icon-button" type="button" onClick={() => setShowCreate(false)} aria-label="Close dialog"><X aria-hidden="true" /></button></div>
-            <div className="create-options">
-              {CREATE_OPTIONS.map((option) => {
-                const Icon = option.icon;
-                return <button type="button" key={option.id} className={source === option.id ? "is-selected" : ""} onClick={() => setSource(option.id)}><span><Icon aria-hidden="true" /></span><strong>{option.label}</strong><small>{option.description}</small>{source === option.id ? <Check className="option-check" aria-hidden="true" /> : null}</button>;
-              })}
-            </div>
-            {source === "github" ? (
-              <div className="connection-preview"><GitFork aria-hidden="true" /><div><strong>GitHub connection ready</strong><p>Select a repository after project creation. Kova will inspect its framework, commands and branch policy before changing code.</p></div><span>Connected</span></div>
-            ) : (
-              <label className="field create-brief"><span>{source === "work" ? "Requirement or PRD" : source === "template" ? "Template goal" : "What should Kova build?"}</span><textarea value={brief} onChange={(event) => setBrief(event.target.value)} rows={4} /></label>
+      {showCreate && (
+        <Modal
+          title="Where would you like to start?"
+          close={() => setShowCreate(false)}
+        >
+          <div className="create-options">
+            {OPTIONS.map(({ id, title, detail, icon: Icon }) => (
+              <button
+                key={id}
+                className={source === id ? "is-selected" : ""}
+                onClick={() => setSource(id)}
+              >
+                <Icon />
+                <strong>{title}</strong>
+                <small>{detail}</small>
+              </button>
+            ))}
+          </div>
+          <form
+            className="form-stack"
+            onSubmit={(e) => {
+              e.preventDefault();
+              createProject();
+            }}
+          >
+            <label className="field">
+              <span>Project name</span>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                maxLength={80}
+                placeholder="Your next big idea"
+              />
+            </label>
+            {(source === "GitHub" || source === "Work item") && (
+              <label className="field">
+                <span>
+                  {source === "GitHub"
+                    ? "Repository URL (reference)"
+                    : "Requirement or design URL"}
+                </span>
+                <input
+                  type="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  required
+                  placeholder="https://..."
+                />
+              </label>
             )}
-            <div className="dialog-footer"><span><FolderGit2 aria-hidden="true" />Private workspace</span><div><button className="button quiet" type="button" onClick={() => setShowCreate(false)}>Cancel</button><button className="button primary" type="button" onClick={createProject}>Create project<ArrowRight aria-hidden="true" /></button></div></div>
-          </section>
-        </div>
-      ) : null}
+            <label className="field">
+              <span>What are we building?</span>
+              <textarea
+                value={brief}
+                onChange={(e) => setBrief(e.target.value)}
+                required
+                rows={3}
+                placeholder="Who is it for, and what should it do?"
+              />
+            </label>
+            {source === "GitHub" && (
+              <p className="muted">
+                <small>
+                  The URL is saved as project context. Repository cloning needs
+                  a connected execution service.
+                </small>
+              </p>
+            )}
+            <button className="button primary wide" type="submit">
+              Create project & plan
+              <ArrowRight />
+            </button>
+          </form>
+        </Modal>
+      )}
+      {actions && (
+        <Modal title={actions.name} close={() => setActions(null)}>
+          <div className="command-results">
+            <button onClick={() => router.push(`/workspace/${actions.id}`)}>
+              <Box />
+              Open workspace
+              <ArrowRight />
+            </button>
+            <button onClick={() => toggleArchive(actions)}>
+              <Archive />
+              {archived.includes(actions.id)
+                ? "Restore project"
+                : "Archive project"}
+              <Check />
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
