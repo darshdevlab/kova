@@ -1,0 +1,13 @@
+.env*
+*.pem
+.git
+.vercel
+.next
+node_modules
+artifacts
+test-results
+playwright-report
+coverage
+tests/**/artifacts
+*.tsbuildinfo
+.DS_Store

@@ -1,0 +1,27 @@
+.root { position: relative; flex-shrink: 0; }
+.trigger { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.trigger:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+.trigger svg { width: 18px; height: 18px; }
+.trigger:focus-visible, .menu button:focus-visible, .form button:focus-visible, .form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.trigger:disabled, .form button:disabled { cursor: not-allowed; opacity: .5; }
+.menu { position: fixed; z-index: 1000; width: min(208px, calc(100vw - 16px)); max-height: calc(100svh - 16px); overflow-y: auto; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); color: var(--text); box-shadow: 0 8px 24px #00000018; }
+.menu button { width: 100%; min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 0; border-radius: 4px; background: transparent; color: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.menu button:hover, .menu button:focus-visible { background: var(--surface-hover); }
+.menu svg, .buttons svg { width: 16px; height: 16px; flex-shrink: 0; }
+.menu .danger { color: var(--error); }
+.form { display: grid; gap: 10px; padding: 4px 0 0; min-width: 0; }
+.form label { font-size: 13px; font-weight: 500; }
+.form input { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: 6px; font-size: 16px; }
+.warning { margin: 0 0 8px; color: var(--text-secondary); font-size: 13px; overflow-wrap: anywhere; }
+.warning strong { color: var(--text); }
+.hint { margin: 0; color: var(--text-muted); font-size: 12px; }
+.error, .inlineError { color: var(--error); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; margin: 4px 0; }
+.inlineError { width: min(260px, 60vw); }
+.buttons { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding-top: 14px; }
+.buttons button { min-height: 44px; display: inline-flex; justify-content: center; align-items: center; gap: 8px; padding: 10px 16px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; }
+.cancel { background: var(--surface); color: var(--text); }
+.saveButton { background: var(--accent); color: var(--accent-ink); }
+.deleteButton { background: var(--error-subtle); color: var(--error); }
+.spin { animation: project-actions-spin 1s linear infinite; }
+@keyframes project-actions-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

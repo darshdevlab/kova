@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeRoot } from "@/components/theme-picker";
+import { PlatformRouter } from "@/components/platform/platform-router";
 import "./globals.css";
+import "@/styles/platform-v3.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,11 +25,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      data-theme="dark"
+      data-theme="light"
       className={`${geistSans.variable} ${geistMono.variable}`}
     >
       <body>
-        <ThemeRoot>{children}</ThemeRoot>
+        <ThemeRoot>
+          <PlatformRouter>{children}</PlatformRouter>
+        </ThemeRoot>
       </body>
     </html>
   );

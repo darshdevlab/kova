@@ -11,21 +11,21 @@ import {
 import { BrandMark } from "@/components/brand-mark";
 
 const colors = [
-  ["Canvas", "#141617", "Page and graph backgrounds"],
-  ["Surface", "#1B1D1F", "Navigation and workspace panels"],
-  ["Raised", "#232628", "Menus and dialogs"],
-  ["Border", "#303537", "Quiet separation"],
-  ["Jade", "#ACD4BE", "Primary actions and selection"],
-  ["Steel", "#9BBBCF", "Secondary data signals"],
-  ["Amber", "#DBB575", "Warnings and attention"],
-  ["Clay", "#E5A39E", "Destructive and error states"],
+  ["Canvas", "#FFFFFF", "Primary working surface"],
+  ["Silver", "#F7F8FA", "Navigation and supporting surfaces"],
+  ["Ink", "#202328", "Primary text"],
+  ["Border", "#E5E7EB", "Quiet separation"],
+  ["Jade", "#245D4B", "Primary actions and selection"],
+  ["Steel", "#365F7D", "Secondary data signals"],
+  ["Amber", "#876028", "Warnings and attention"],
+  ["Clay", "#A0443E", "Destructive and error states"],
 ];
 
 export default function DesignSystemPage() {
   return (
     <div className="design-reference">
       <header className="product-topbar">
-        <BrandMark context="Design system / 02" />
+        <BrandMark context="Design system / 03" />
         <Link className="text-button" href="/projects">
           <ArrowLeft />
           Workspace
@@ -34,8 +34,8 @@ export default function DesignSystemPage() {
       <main className="hub-main">
         <div className="hub-heading">
           <div>
-            <span className="eyebrow">Kova / Graphite</span>
-            <h1>Quiet confidence. Clear intent.</h1>
+            <span className="eyebrow">Silver / Ink / Jade</span>
+            <h1>Kova Design System</h1>
             <p>The shared visual and interaction standard for Kova.</p>
           </div>
           <span className="tag">September 2026</span>
@@ -71,7 +71,7 @@ export default function DesignSystemPage() {
           </div>
           <div className="type-specimens">
             <div>
-              <span>Page / 28px / 550</span>
+              <span>Page / 25-30px / 550</span>
               <h1>A clear plan. A better build.</h1>
             </div>
             <div>
@@ -79,7 +79,7 @@ export default function DesignSystemPage() {
               <h2>Every change, accounted for.</h2>
             </div>
             <div>
-              <span>Body / 14px / 400</span>
+              <span>Product / 13px / 400</span>
               <p>
                 Requirements, decisions, and release evidence stay connected.
               </p>
@@ -175,8 +175,9 @@ export default function DesignSystemPage() {
               <div>
                 <strong>Save the work, not just the screen</strong>
                 <p>
-                  Prompt drafts, requirements, data, agent graphs, and release
-                  records persist on this device.
+                  Project conversations, saved builds, Bot organisations and
+                  approved memory persist in the workspace. Unsaved edits remain
+                  clearly marked.
                 </p>
               </div>
             </div>
@@ -200,16 +201,16 @@ export default function DesignSystemPage() {
               </p>
             </div>
             <div>
-              <span>Compact / 681–1150px</span>
+              <span>Compact / 801-1150px</span>
               <p>
                 Narrow navigation. Supporting panels stack when content needs
                 more space.
               </p>
             </div>
             <div>
-              <span>Mobile / 680px and below</span>
+              <span>Mobile / 800px and below</span>
               <p>
-                Bottom navigation, separate conversation and preview tabs,
+                Drawer navigation, stacked conversation and preview,
                 stacked inspectors, and scrollable graph controls.
               </p>
             </div>
@@ -235,9 +236,16 @@ export default function DesignSystemPage() {
               connection handling. Kova owns the visual treatment and journey.
             </p>
             <p>
-              The initial Ember / Action Blue design is superseded by this
-              Graphite / Jade revision. Current tokens live in{" "}
-              <code>src/app/globals.css</code>.
+              <a href="https://vercel.com/geist/typography">Geist</a> informs
+              precise typography;{" "}
+              <a href="https://linear.app/docs/projects">Linear</a> informs
+              project-oriented navigation. Kova keeps its own composition,
+              colour system and interaction flows.
+            </p>
+            <p>
+              Silver is the default. Graphite and four developer themes remain
+              available. Current tokens live in <code>src/lib/theme.ts</code>;
+              workspace rules live in <code>src/styles/platform-v3.css</code>.
             </p>
           </div>
         </section>

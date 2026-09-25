@@ -20,6 +20,7 @@ export async function GET() {
   try {
     const response = await fetch("https://openrouter.ai/api/v1/models", {
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) throw new Error("Model catalog unavailable");
 

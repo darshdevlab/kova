@@ -32,17 +32,17 @@ const dark: Colors = {
   "error-subtle": "#402a2a",
 };
 const light: Colors = {
-  canvas: "#e9edeb",
-  surface: "#f6f8f6",
+  canvas: "#ffffff",
+  surface: "#f7f8fa",
   "surface-raised": "#ffffff",
-  "surface-subtle": "#e4e9e6",
-  "surface-hover": "#dce3df",
-  text: "#202825",
-  "text-secondary": "#4f5e57",
-  "text-muted": "#637369",
-  border: "#ced6d1",
-  "border-strong": "#9caea1",
-  accent: "#315f49",
+  "surface-subtle": "#f0f2f4",
+  "surface-hover": "#eceff2",
+  text: "#202328",
+  "text-secondary": "#5b626c",
+  "text-muted": "#69717c",
+  border: "#e5e7eb",
+  "border-strong": "#cdd2d9",
+  accent: "#245d4b",
   "accent-ink": "#f5faf7",
   "accent-subtle": "#dbe9df",
   blue: "#365f7d",
@@ -170,7 +170,7 @@ export const THEMES = [
 
 const STORAGE_KEY = "kova:appearance:v3";
 const EVENT = "kova:appearance-changed";
-const DEFAULT = '{"preset":"graphite","overrides":{}}';
+const DEFAULT = '{"preset":"silver","overrides":{}}';
 const LEGACY_LIGHT = '{"preset":"silver","overrides":{}}';
 
 function subscribe(listener: () => void) {

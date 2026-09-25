@@ -1,0 +1,6 @@
+{
+  "openai": { "data": [{ "id": "gpt-fixture" }, { "id": "text-embedding-fixture" }] },
+  "anthropic": [{ "data": [{ "id": "claude-fixture-a", "display_name": "Claude fixture A" }], "has_more": true, "last_id": "claude-fixture-a" }, { "data": [{ "id": "claude-fixture-b", "display_name": "Claude fixture B" }], "has_more": false }],
+  "openrouter": { "data": [{ "id": "vendor/model-fixture", "name": "Vendor model", "context_length": 128000 }] },
+  "ollama": { "models": [{ "name": "local-fixture:latest" }] }
+}

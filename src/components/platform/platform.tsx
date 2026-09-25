@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   ArrowRight,
   Bell,
   Bot,
@@ -25,17 +23,23 @@ import {
   Menu,
   MoreHorizontal,
   Palette,
-  Play,
   Plus,
   Search,
   Settings,
   ShieldCheck,
   Sparkles,
   Users,
-  Workflow,
   X,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
+import { HomeModelControls } from "@/components/providers/home-model-controls";
+import { ProjectActions } from "./project-actions";
+import { BuilderV3 } from "@/components/builder-v3";
+import { BotPortal } from "@/components/bots-v2";
+import { teamSchema } from "@/lib/bot-teams";
+import { AIProvidersPanel } from "@/components/providers/ai-providers-panel";
+import { MemoryPanel } from "@/components/memory";
+import { onboardingKey, parseOnboardingIntent } from "@/lib/onboarding-intent";
 import { Modal } from "@/components/ui";
 import { ThemePicker } from "@/components/theme-picker";
 import { clearSession, writeSession } from "@/lib/storage";
@@ -51,10 +55,9 @@ import {
   type RecordData,
   type RecordKind,
 } from "@/lib/platform";
-import { initialWorkspace, downloadFile } from "@/lib/workspace-state";
-import type { KovaProject } from "@/lib/types";
+import { downloadFile } from "@/lib/workspace-state";
 
-type View =
+export type View =
   | "projects"
   | "bots"
   | "approvals"
@@ -71,11 +74,6 @@ const NAV = [
   { id: "integrations", label: "Connections", icon: Link2 },
   { id: "settings", label: "Settings", icon: Settings },
 ] as const;
-const QUESTIONS = [
-  "Who will use this, and what should they achieve?",
-  "What is in scope for the first release?",
-  "How will we know the result is successful?",
-];
 const ROLES: Role[] = ["Admin", "PM", "Developer", "QA", "Viewer"];
 const date = (value: string) =>
   new Date(value).toLocaleDateString(undefined, {
@@ -103,6 +101,15 @@ export function Platform({
   const [busy, setBusy] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [theme, setTheme] = useState(false);
+  const [profile, setProfile] = useState(false);
+  const profilePanel = useRef<HTMLElement>(null);
+  const [profileName, setProfileName] = useState("");
+  const [usage, setUsage] = useState<{
+    requestsUsed: number;
+    requestLimit: number;
+  } | null>(null);
+  const [deliveryMode, setDeliveryMode] = useState("direct");
+  const [settingsTab, setSettingsTab] = useState("providers");
   const [query, setQuery] = useState("");
   const [aiConnection, setAiConnection] = useState("Checking availability");
   const [archived, setArchived] = useState(false);
@@ -112,9 +119,10 @@ export function Platform({
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
   const [source, setSource] = useState("Prompt");
-  const [directBuild, setDirectBuild] = useState(false);
   const [url, setUrl] = useState("");
   const [model, setModel] = useState("auto");
+  const [homeConnectionId, setHomeConnectionId] = useState("");
+  const [modelReady, setModelReady] = useState(false);
   const [mode, setMode] = useState("Sequential");
   const [instructions, setInstructions] = useState("");
   const [amount, setAmount] = useState(1000);
@@ -128,8 +136,6 @@ export function Platform({
   const [invites, setInvites] = useState<
     { id: string; email: string; role: Role }[]
   >([]);
-  const [answers, setAnswers] = useState(["", "", ""]);
-  const [content, setContent] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const current = records.find((r) => r.id === itemId);
@@ -139,8 +145,11 @@ export function Platform({
   const editable = canEdit(role);
   const admin = isAdmin(role);
   const titleLabel = NAV.find((n) => n.id === view)?.label || "Projects";
+  const loadGeneration = useRef(0);
+  const desiredSpace = useRef<string | undefined>(undefined);
 
   const load = useCallback(async (sid: string) => {
+    const generation = ++loadGeneration.current;
     const db = database();
     const { data, error } = await db
       .from("kova_records")
@@ -149,26 +158,76 @@ export function Platform({
       .order("created_at", { ascending: false });
     if (error)
       throw Error("Unable to load workspace. Check your connection and retry.");
-    setRecords(data as PlatformRecord[]);
     const memberResult = await db
       .from("kova_members")
       .select("user_id,role")
       .eq("space_id", sid);
     if (memberResult.error) throw Error("Unable to verify membership.");
-    setMembers(memberResult.data);
     const user = await db.auth.getUser();
-    setRole(
+    if (user.error || !user.data.user)
+      throw Error("Your session expired. Sign in again to continue.");
+    const nextRole =
       memberResult.data.find(
         (m: { user_id: string; role: Role }) =>
           m.user_id === user.data.user?.id,
-      )?.role || "Viewer",
-    );
+      )?.role || "Viewer";
     const inviteResult = await db
       .from("kova_invites")
       .select("id,email,role")
       .eq("space_id", sid);
+    if (generation !== loadGeneration.current || desiredSpace.current !== sid)
+      return false;
+    setRecords(data as PlatformRecord[]);
+    setMembers(memberResult.data);
+    setRole(nextRole);
     setInvites(inviteResult.data || []);
+    return true;
   }, []);
+
+  useEffect(() => {
+    if (!profile) return;
+    const trigger =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    profilePanel.current?.querySelector<HTMLElement>("a,button")?.focus();
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setProfile(false);
+      }
+      if (event.key !== "Tab") return;
+      const controls = Array.from(
+        profilePanel.current?.querySelectorAll<HTMLElement>(
+          "a[href],button:not([disabled])",
+        ) || [],
+      );
+      const first = controls[0],
+        last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener("keydown", keyboard);
+    return () => {
+      document.removeEventListener("keydown", keyboard);
+      trigger?.focus();
+    };
+  }, [profile]);
+
+  useEffect(() => {
+    if (!profile) return;
+    const controller = new AbortController();
+    fetch("/api/account-usage", { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setUsage)
+      .catch(() => {});
+    return () => controller.abort();
+  }, [profile]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -190,6 +249,11 @@ export function Platform({
         }
         if (!active) return;
         setEmail(data.user.email || "");
+        setProfileName(
+          data.user.user_metadata.full_name ||
+            data.user.email?.split("@")[0] ||
+            "Your account",
+        );
         setUserId(data.user.id);
         writeSession({
           email: data.user.email || "",
@@ -203,6 +267,28 @@ export function Platform({
           space_kind: "personal",
         });
         if (personal.error) throw personal.error;
+        const pendingRaw = sessionStorage.getItem(onboardingKey);
+        const pending = parseOnboardingIntent(
+          pendingRaw,
+          data.user.email || "",
+        );
+        if (pendingRaw && !pending)
+          setToast(
+            "Your previous sign-in choice expired or was invalid. Choose a workspace below.",
+          );
+        let onboardedId: string | undefined;
+        if (
+          pending?.intent === "organisation" &&
+          pending.action === "create-company"
+        ) {
+          const created = await db.rpc("kova_create_company_once", {
+            request_id: pending.id,
+            company_name: pending.organisationName,
+          });
+          if (created.error) throw created.error;
+          onboardedId = created.data;
+          sessionStorage.setItem(`kova:active:${data.user.id}`, created.data);
+        }
         const result = await db
           .from("kova_spaces")
           .select("*")
@@ -210,7 +296,24 @@ export function Platform({
         if (result.error) throw result.error;
         if (!active) return;
         setSpaces(result.data);
-        let sid = sessionStorage.getItem(`kova:active:${data.user.id}`);
+        let sid =
+          onboardedId || sessionStorage.getItem(`kova:active:${data.user.id}`);
+        if (pending?.intent === "individual")
+          sid = result.data.find((s: Space) => s.kind === "personal")?.id;
+        if (
+          pending?.intent === "organisation" &&
+          pending.action === "select-workspace"
+        ) {
+          const company =
+            result.data.find(
+              (s: Space) => s.kind === "company" && s.id === sid,
+            ) || result.data.find((s: Space) => s.kind === "company");
+          if (company) sid = company.id;
+          else
+            setToast(
+              "No organisation membership yet. Create an organisation or ask an administrator for an invitation.",
+            );
+        }
         if (itemId) {
           const item = await db
             .from("kova_records")
@@ -221,8 +324,13 @@ export function Platform({
         }
         const selected =
           result.data.find((s: Space) => s.id === sid) || result.data[0];
+        if (!active || !selected) return;
+        desiredSpace.current = selected.id;
         setSpace(selected);
-        await load(selected.id);
+        const loaded = await load(selected.id);
+        if (!active || !loaded) return;
+        sessionStorage.setItem(`kova:active:${data.user.id}`, selected.id);
+        if (pendingRaw) sessionStorage.removeItem(onboardingKey);
       } catch {
         if (active)
           setError(
@@ -243,10 +351,17 @@ export function Platform({
     return () => clearTimeout(timer);
   }, [toast]);
   useEffect(() => {
+    if (view !== "approvals" || !space?.id) return;
+    const timer = setTimeout(() => {
+      void load(space.id).catch(() =>
+        setError("Could not refresh your inbox. Please retry."),
+      );
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [view, space?.id, load]);
+  useEffect(() => {
     const timer = setTimeout(() => {
       if (current) {
-        setContent(current.data.content || "");
-        setAnswers(current.data.answers || ["", "", ""]);
         setMode(current.data.mode || "Sequential");
         setInstructions(current.data.instructions || "");
       }
@@ -284,11 +399,15 @@ export function Platform({
     await action(async () => {
       const next = spaces.find((s: Space) => s.id === sid);
       if (!next) return;
+      desiredSpace.current = sid;
       setRecords([]);
       setSpace(next);
       setRole("Viewer");
+      setHomeConnectionId("");
+      setModel("auto");
+      setModelReady(false);
       sessionStorage.setItem(`kova:active:${userId}`, sid);
-      await load(sid);
+      if (!(await load(sid))) return;
       if (itemId) router.push(`/${view}`);
     });
   }
@@ -316,69 +435,11 @@ export function Platform({
       model,
       status: "Draft",
       stage: "Clarify",
+      deliveryMode,
       answers: ["", "", ""],
     });
     setModal(null);
-    router.push(directBuild ? `/workspace/${row.id}` : `/projects/${row.id}`);
-  }
-  async function buildWorkspace() {
-    if (!current) return;
-    const project: KovaProject = {
-      id: current.id,
-      name: current.data.title,
-      description: current.data.description || "",
-      source: (current.data.source as KovaProject["source"]) || "Prompt",
-      status: "Draft",
-      updatedAt: "Just now",
-      mode: "Developer",
-      accent: "green",
-      progress: 0,
-    };
-    const workspace = current.data.workspace || initialWorkspace(project);
-    workspace.brief = current.data.content || current.data.description || "";
-    workspace.approved = true;
-    await save(
-      "project",
-      { ...current.data, workspace, stage: "Build" },
-      current,
-    );
-    router.push(`/workspace/${current.id}`);
-  }
-  async function runBot(bot: PlatformRecord) {
-    const steps = BOT_STEPS;
-    await save("run", {
-      title: `${bot.data.title} run`,
-      botId: bot.id,
-      status: "Awaiting approval",
-      completed: 2,
-      steps,
-      mode: bot.data.mode,
-      source: "Simulation",
-      description:
-        "Fixture analysis completed. No external services or repository tools were called.",
-    });
-    setToast("Simulation paused for PM approval. Open the run below.");
-  }
-  async function advanceRun(run: PlatformRecord) {
-    const completed = run.data.completed || 0;
-    if (completed === 2 && !["Owner", "Admin", "PM"].includes(role))
-      throw Error("A PM or workspace administrator must approve this step.");
-    if (completed === 4 && !["Owner", "Admin", "Developer"].includes(role))
-      throw Error(
-        "A developer or workspace administrator must approve this step.",
-      );
-    if (completed === 9 && !admin)
-      throw Error("A workspace administrator must approve release.");
-    const next = completed === 2 ? 4 : completed === 4 ? 9 : 10;
-    await save(
-      "run",
-      {
-        ...run.data,
-        completed: next,
-        status: next === 10 ? "Simulation complete" : "Awaiting approval",
-      },
-      run,
-    );
+    router.push(`/projects/${row.id}`);
   }
   function empty(label: string, detail: string) {
     return (
@@ -417,216 +478,18 @@ export function Platform({
           "Project unavailable",
           "It may have been removed, or you may not have access.",
         );
-      const stage = current.data.stage || "Clarify";
       return (
-        <>
-          <Link href="/projects" className="text-action">
-            <ArrowLeft />
-            All projects
-          </Link>
-          {heading(current.data.title, current.data.description || "")}
-          <div className="flow-stage-nav">
-            {["Clarify", "PRD", "TRD", "Build"].map((s) => (
-              <button key={s} className={stage === s ? "active" : ""} disabled>
-                {s}
-              </button>
-            ))}
-          </div>
-          <div className="detail-layout">
-            <section className="detail-section">
-              <h2>
-                {stage === "Clarify"
-                  ? "A few details before we begin"
-                  : stage === "Build"
-                    ? "Ready for your workspace"
-                    : `${stage} review`}
-              </h2>
-              {stage === "Clarify" ? (
-                <form
-                  className="form-stack"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void action(async () => {
-                      const document = `# ${current.data.title}\n\n## Goal\n${current.data.description}\n\n## Audience\n${answers[0]}\n\n## Scope\n${answers[1]}\n\n## Acceptance criteria\n${answers[2]}\n\n## Open questions\nConfirm dependencies, data handling and launch constraints before implementation.`;
-                      await save(
-                        "project",
-                        {
-                          ...current.data,
-                          answers,
-                          stage: "PRD",
-                          content: document,
-                          status: "Needs review",
-                        },
-                        current,
-                      );
-                    });
-                  }}
-                >
-                  {QUESTIONS.map((q, i) => (
-                    <label className="field" key={q}>
-                      <span>{q}</span>
-                      <textarea
-                        required
-                        rows={3}
-                        value={answers[i] || ""}
-                        disabled={!editable}
-                        onChange={(e) =>
-                          setAnswers((a) =>
-                            a.map((v, j) => (i === j ? e.target.value : v)),
-                          )
-                        }
-                      />
-                    </label>
-                  ))}
-                  <button
-                    className="button primary"
-                    disabled={busy || !editable}
-                  >
-                    Prepare PRD
-                    <ArrowRight />
-                  </button>
-                </form>
-              ) : stage === "Build" ? (
-                <>
-                  <p className="muted">
-                    Your approved plan is attached to the editor. Code execution
-                    and deployment readiness remain separate checks.
-                  </p>
-                  <button
-                    className="button primary"
-                    disabled={busy || !editable}
-                    onClick={() => void action(buildWorkspace)}
-                  >
-                    Open project editor
-                    <ArrowRight />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <textarea
-                    className="document-editor"
-                    aria-label={`${stage} document`}
-                    value={content}
-                    disabled={!editable}
-                    onChange={(e) => setContent(e.target.value)}
-                  />
-                  <div className="inline-actions">
-                    <button
-                      className="button secondary"
-                      disabled={busy || !editable}
-                      onClick={() =>
-                        void action(async () => {
-                          await save(
-                            "project",
-                            { ...current.data, content },
-                            current,
-                          );
-                          setToast("Draft saved");
-                        })
-                      }
-                    >
-                      Save draft
-                    </button>
-                    <button
-                      className="button primary"
-                      disabled={
-                        busy ||
-                        !(stage === "PRD"
-                          ? ["Owner", "Admin", "PM"].includes(role)
-                          : ["Owner", "Admin", "Developer"].includes(role))
-                      }
-                      onClick={() =>
-                        void action(async () => {
-                          if (!content.trim())
-                            throw Error(
-                              "A document is required before approval.",
-                            );
-                          if (stage === "PRD") {
-                            await save(
-                              "project",
-                              {
-                                ...current.data,
-                                content: `# Technical plan: ${current.data.title}\n\n## Approved product requirements\n${content}\n\n## Architecture\n[Specify services and responsibilities]\n\n## APIs and data\n[Specify contracts and access policies]\n\n## Testing and release\n[Specify actual test commands, evidence and rollback]`,
-                                stage: "TRD",
-                                status: "Needs technical review",
-                              },
-                              current,
-                            );
-                          } else {
-                            if (content.includes("[Specify"))
-                              throw Error(
-                                "Complete the technical-plan placeholders before approval.",
-                              );
-                            await save(
-                              "project",
-                              {
-                                ...current.data,
-                                content,
-                                stage: "Build",
-                                status: "Approved",
-                              },
-                              current,
-                            );
-                          }
-                        })
-                      }
-                    >
-                      Approve {stage}
-                      <Check />
-                    </button>
-                    <button
-                      className="button quiet"
-                      onClick={() =>
-                        downloadFile(
-                          `${current.data.title}-${stage}.md`,
-                          content,
-                        )
-                      }
-                    >
-                      <Download />
-                      Export
-                    </button>
-                  </div>
-                </>
-              )}
-            </section>
-            <aside className="detail-aside">
-              <h3>Project context</h3>
-              <p>
-                {current.data.source} / {status(current.data.status || "Draft")}
-              </p>
-              {current.data.url && (
-                <p className="small-code">{current.data.url}</p>
-              )}
-              <h3>Document destination</h3>
-              <p>Notion</p>
-              <Link className="text-action" href="/integrations">
-                Manage connection
-                <ArrowRight />
-              </Link>
-              <h3>Approval policy</h3>
-              <p>
-                PM approval for product scope. Developer approval for the
-                technical plan. Changed scope needs a fresh review.
-              </p>
-              <button
-                className="button quiet"
-                disabled={busy || !editable}
-                onClick={() =>
-                  void action(async () => {
-                    await save(
-                      "project",
-                      { ...current.data, stage: "Clarify", status: "Draft" },
-                      current,
-                    );
-                  })
-                }
-              >
-                Reopen scope
-              </button>
-            </aside>
-          </div>
-        </>
+        <BuilderV3
+          key={current.id}
+          project={current}
+          role={role}
+          onSaved={(saved) =>
+            setRecords((all) => [
+              saved,
+              ...all.filter((r) => r.id !== saved.id),
+            ])
+          }
+        />
       );
     }
     const projects = records.filter(
@@ -639,42 +502,78 @@ export function Platform({
     );
     return (
       <>
-        {heading(
-          "A new day. A new possibility.",
-          "Bring an idea, or pick up where you left off.",
-        )}
+        <div className="home-heading">
+          <span className="eyebrow">
+            {space?.kind === "company"
+              ? "Team workspace"
+              : "Personal workspace"}
+          </span>
+          <h1>What are we building?</h1>
+        </div>
         <section className="launchpad">
           <form
             className="prompt-surface"
             onSubmit={(e) => {
               e.preventDefault();
-              setSource("Prompt");
-              openCreate("project");
+              void action(async () => {
+                if (!modelReady || !editable || !prompt.trim())
+                  throw Error(
+                    "Select an available model and enter your requirement.",
+                  );
+                const row = await save("project", {
+                  title: prompt
+                    .trim()
+                    .split(/\s+/)
+                    .slice(0, 7)
+                    .join(" ")
+                    .slice(0, 80),
+                  description: prompt.trim(),
+                  model,
+                  providerConnectionId: homeConnectionId || undefined,
+                  deliveryMode,
+                  source: "Prompt",
+                  stage: "Clarify",
+                  status: "Draft",
+                });
+                setPrompt("");
+                sessionStorage.setItem(`kova:build-start:${row.id}`, "1");
+                router.push(`/projects/${row.id}`);
+              });
             }}
           >
             <textarea
               aria-label="Build prompt"
-              placeholder="What would you like to build?"
+              placeholder="Describe your application, or a change you want to make…"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               required
               disabled={!editable}
             />
             <div className="prompt-controls">
-              <select
-                aria-label="Model"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
+              <div className="composer-options">
+                <HomeModelControls
+                  spaceId={space!.id}
+                  model={model}
+                  onModelChange={setModel}
+                  connectionId={homeConnectionId}
+                  onConnectionChange={setHomeConnectionId}
+                  onReadyChange={setModelReady}
+                />
+                <select
+                  aria-label="Project journey"
+                  value={deliveryMode}
+                  onChange={(e) => setDeliveryMode(e.target.value)}
+                >
+                  <option value="direct">Direct build</option>
+                  <option value="delivery">Product delivery</option>
+                </select>
+              </div>
+              <button
+                className="button primary"
+                disabled={!editable || busy || !prompt.trim() || !modelReady}
               >
-                <option value="auto">Auto model routing</option>
-                <option value="openai/gpt-4o-mini">OpenAI / GPT-4o mini</option>
-                <option value="anthropic/claude-sonnet-4">
-                  Anthropic / Claude Sonnet 4
-                </option>
-              </select>
-              <button className="button primary" disabled={!editable}>
-                <Sparkles />
-                Build from a prompt
+                Build application
+                {busy ? <LoaderCircle className="spin" /> : <ArrowRight />}
               </button>
             </div>
           </form>
@@ -688,7 +587,6 @@ export function Platform({
           >
             <GitBranch />
             <strong>Import a repository</strong>
-            <span>Continue with your existing codebase.</span>
             <ArrowRight />
           </button>
         </section>
@@ -717,14 +615,12 @@ export function Platform({
         <div className="record-grid">
           {projects.map((r) => (
             <article className="record-card" key={r.id}>
-              <Link href={`/projects/${r.id}`}>
-                <Image
-                  src="/previews/application.png"
-                  width={720}
-                  height={420}
-                  alt="Illustrative workspace preview"
-                  unoptimized
-                />
+              <Link
+                className="project-file-icon"
+                href={`/projects/${r.id}`}
+                aria-label={`Open ${r.data.title}`}
+              >
+                <FolderOpen />
               </Link>
               <div className="record-card-body">
                 <div className="record-meta">
@@ -737,25 +633,14 @@ export function Platform({
                 <p>{r.data.description}</p>
                 <div className="record-meta">
                   <span>
-                    {r.data.source} / {r.data.stage}
+                    {r.data.source} /{" "}
+                    {r.data.deliveryMode === "delivery"
+                      ? "Product delivery"
+                      : "Direct build"}
                   </span>
-                  <button
-                    className="icon-button ghost"
-                    title={archived ? "Restore project" : "Archive project"}
-                    aria-label={`${archived ? "Restore" : "Archive"} ${r.data.title}`}
-                    disabled={!editable || busy}
-                    onClick={() =>
-                      void action(async () => {
-                        await save(
-                          "project",
-                          { ...r.data, archived: !archived },
-                          r,
-                        );
-                      })
-                    }
-                  >
-                    <MoreHorizontal />
-                  </button>
+                  <ProjectActions record={r} role={role}
+                    onSaved={saved => setRecords(all => all.map(item => item.id === saved.id ? saved : item))}
+                    onDeleted={id => setRecords(all => all.filter(item => item.id !== id))} />
                 </div>
               </div>
             </article>
@@ -767,316 +652,6 @@ export function Platform({
             archived
               ? "Archived projects will appear here."
               : "Start with a prompt or bring an existing repository.",
-          )}
-      </>
-    );
-  }
-  function renderBots() {
-    if (itemId) {
-      if (!current)
-        return empty(
-          "Bot unavailable",
-          "Check the link or your workspace access.",
-        );
-      const runs = records.filter(
-        (r) => r.kind === "run" && r.data.botId === current.id,
-      );
-      return (
-        <>
-          <Link className="text-action" href="/bots">
-            <ArrowLeft />
-            All Bots
-          </Link>
-          {heading(
-            current.data.title,
-            "Delivery Bot / Lyzr adapter",
-            <button
-              className="button primary"
-              disabled={busy || !editable}
-              onClick={() => void action(() => runBot(current))}
-            >
-              <Play />
-              Run simulation
-            </button>,
-          )}
-          <div className="platform-alert">
-            <ShieldCheck />
-            Simulation: no Lyzr calls, code execution or deployment occurs.
-          </div>
-          <div className="detail-layout">
-            <div>
-              <section className="detail-section">
-                <h2>Workflow</h2>
-                <div
-                  className={mode === "Parallel" ? "bot-parallel" : "bot-chain"}
-                >
-                  {BOT_STEPS.map((s, i) => (
-                    <div className="bot-step" key={s}>
-                      <span className="bot-step-icon">
-                        {s.includes("approval") ? <ShieldCheck /> : i + 1}
-                      </span>
-                      <div className="bot-step-text">
-                        <strong>{s}</strong>
-                        <small>
-                          {s.includes("approval")
-                            ? "Human approval gate"
-                            : mode === "Hierarchical" || mode === "Mixed"
-                              ? "Reports to Coordinator Bot"
-                              : "Specialist Bot"}
-                        </small>
-                      </div>
-                      {i === 0 && status(mode)}
-                    </div>
-                  ))}
-                </div>
-              </section>
-              <section className="detail-section">
-                <h2>Run history</h2>
-                {!runs.length && <p className="muted">No runs yet.</p>}
-                {runs.map((run) => (
-                  <div key={run.id} className="run-entry">
-                    <div className="section-heading">
-                      <strong>{run.data.title}</strong>
-                      {status(run.data.status || "")}
-                    </div>
-                    <p className="muted">
-                      {run.data.completed}/{BOT_STEPS.length} simulated steps /{" "}
-                      {run.data.mode}
-                    </p>
-                    <progress
-                      value={run.data.completed || 0}
-                      max={BOT_STEPS.length}
-                    />
-                    <p className="muted">{run.data.description}</p>
-                    <div className="inline-actions">
-                      {run.data.status === "Failed" ? (
-                        <button
-                          className="button secondary"
-                          disabled={busy || !editable}
-                          onClick={() =>
-                            void action(async () => {
-                              await save(
-                                "run",
-                                {
-                                  ...run.data,
-                                  status: "Awaiting approval",
-                                  failure: "",
-                                },
-                                run,
-                              );
-                            })
-                          }
-                        >
-                          Retry from checkpoint
-                        </button>
-                      ) : run.data.status === "Awaiting approval" ? (
-                        <button
-                          className="button quiet"
-                          disabled={busy || !editable}
-                          onClick={() =>
-                            void action(async () => {
-                              await save(
-                                "run",
-                                {
-                                  ...run.data,
-                                  status: "Failed",
-                                  failure:
-                                    "Simulated provider timeout. Completed steps are preserved.",
-                                },
-                                run,
-                              );
-                            })
-                          }
-                        >
-                          Simulate failure
-                        </button>
-                      ) : null}
-                      {run.data.failure && (
-                        <p role="status" className="muted">
-                          {run.data.failure}
-                        </p>
-                      )}
-                      {run.data.status === "Awaiting approval" && (
-                        <button
-                          className="button primary"
-                          disabled={busy || !editable}
-                          onClick={() => void action(() => advanceRun(run))}
-                        >
-                          Approve {BOT_STEPS[run.data.completed || 0]}
-                          <Check />
-                        </button>
-                      )}
-                      {run.data.status !== "Simulation complete" &&
-                        run.data.status !== "Cancelled" && (
-                          <button
-                            className="button secondary"
-                            disabled={busy || !editable}
-                            onClick={() =>
-                              void action(async () => {
-                                await save(
-                                  "run",
-                                  {
-                                    ...run.data,
-                                    status:
-                                      run.data.status === "Paused"
-                                        ? "Awaiting approval"
-                                        : "Paused",
-                                  },
-                                  run,
-                                );
-                              })
-                            }
-                          >
-                            {run.data.status === "Paused" ? "Resume" : "Pause"}
-                          </button>
-                        )}
-                      {run.data.status !== "Simulation complete" &&
-                        run.data.status !== "Cancelled" && (
-                          <button
-                            className="button quiet"
-                            disabled={busy || !editable}
-                            onClick={() =>
-                              void action(async () => {
-                                await save(
-                                  "run",
-                                  { ...run.data, status: "Cancelled" },
-                                  run,
-                                );
-                              })
-                            }
-                          >
-                            Cancel
-                          </button>
-                        )}
-                    </div>
-                  </div>
-                ))}
-              </section>
-            </div>
-            <aside className="detail-aside">
-              <form
-                className="form-stack"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void action(async () => {
-                    await save(
-                      "bot",
-                      { ...current.data, mode, instructions },
-                      current,
-                    );
-                    setToast("Bot configuration saved");
-                  });
-                }}
-              >
-                <label className="field">
-                  <span>Execution mode</span>
-                  <select
-                    value={mode}
-                    disabled={!editable}
-                    onChange={(e) => setMode(e.target.value)}
-                  >
-                    {["Sequential", "Parallel", "Hierarchical", "Mixed"].map(
-                      (s) => (
-                        <option key={s}>{s}</option>
-                      ),
-                    )}
-                  </select>
-                </label>
-                <label className="field">
-                  <span>Bot instructions</span>
-                  <textarea
-                    rows={6}
-                    value={instructions}
-                    disabled={!editable}
-                    onChange={(e) => setInstructions(e.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span>Provider</span>
-                  <input value="Lyzr / simulated" readOnly />
-                </label>
-                <p>
-                  Human approvals remain mandatory. Parallel mode groups
-                  independent work; approval-dependent steps cannot run ahead.
-                </p>
-                <button
-                  className="button secondary"
-                  disabled={busy || !editable}
-                >
-                  Save configuration
-                </button>
-              </form>
-              <h3>Bot link</h3>
-              <p className="small-code">/bots/{current.id}</p>
-              <button
-                className="text-action"
-                onClick={() =>
-                  void action(async () => {
-                    await navigator.clipboard.writeText(location.href);
-                    setToast("Private Bot link copied");
-                  })
-                }
-              >
-                Copy private link
-                <Link2 />
-              </button>
-            </aside>
-          </div>
-        </>
-      );
-    }
-    const bots = records.filter((r) => r.kind === "bot");
-    return (
-      <>
-        {heading(
-          "A team beyond your team.",
-          "Give each Bot a role. Keep every handoff in view.",
-          <button
-            className="button primary"
-            disabled={!editable}
-            onClick={() => openCreate("bot")}
-          >
-            <Plus />
-            Create Bot
-          </button>,
-        )}
-        <div className="platform-alert">
-          <Workflow />
-          Lyzr execution is simulated. Configurations and run history are saved
-          to your workspace.
-        </div>
-        <div className="record-grid">
-          {bots.map((bot) => (
-            <article key={bot.id} className="record-card">
-              <div className="record-card-body">
-                <div className="record-meta">
-                  <span className="record-icon">
-                    <Bot />
-                  </span>
-                  {status("Simulation")}
-                </div>
-                <Link href={`/bots/${bot.id}`}>
-                  <h3>{bot.data.title}</h3>
-                </Link>
-                <p>
-                  {bot.data.description ||
-                    "From product discovery to a reviewed release."}
-                </p>
-                <div className="record-meta">
-                  <span>{bot.data.mode}</span>
-                  <Link href={`/bots/${bot.id}`} className="text-action">
-                    Open Bot
-                    <ArrowRight />
-                  </Link>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-        {!bots.length &&
-          empty(
-            "A place for your Bots",
-            "Create your first delivery Bot and configure how its team works.",
           )}
       </>
     );
@@ -1305,7 +880,15 @@ export function Platform({
     const pending = records.filter(
       (r) =>
         (r.kind === "project" && r.data.status?.includes("review")) ||
-        (r.kind === "run" && r.data.status === "Awaiting approval"),
+        (r.kind === "run" && r.data.status === "Awaiting approval") ||
+        (r.kind === "bot" &&
+          (() => {
+            const team = teamSchema.safeParse(r.data);
+            return (
+              team.success &&
+              team.data.approvals.some((a) => a.status === "Pending")
+            );
+          })()),
     );
     return (
       <>
@@ -1325,7 +908,9 @@ export function Platform({
                   <p>
                     {r.kind === "run"
                       ? BOT_STEPS[r.data.completed || 0]
-                      : r.data.status}
+                      : r.kind === "bot"
+                        ? "Bot team decisions awaiting review (demo execution)"
+                        : r.data.status}
                   </p>
                 </div>
                 <Link
@@ -1333,7 +918,9 @@ export function Platform({
                   href={
                     r.kind === "run"
                       ? `/bots/${r.data.botId}`
-                      : `/projects/${r.id}`
+                      : r.kind === "bot"
+                        ? `/bots/${r.id}`
+                        : `/projects/${r.id}`
                   }
                 >
                   Review
@@ -1422,94 +1009,120 @@ export function Platform({
   function renderSettings() {
     return (
       <>
-        {heading(
-          "Make this space yours.",
-          "Account, appearance and portable project data.",
-        )}
-        <div className="detail-layout">
-          <div>
-            <section className="detail-section">
-              <h2>Appearance</h2>
-              <ThemePicker />
-            </section>
-            <section className="detail-section">
-              <h2>Change password</h2>
-              <form
-                className="form-stack"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void action(async () => {
-                    if (newPassword !== confirmPassword)
-                      throw Error("Passwords do not match.");
-                    const { error } = await database().auth.updateUser({
-                      password: newPassword,
-                    });
-                    if (error) throw Error(error.message);
-                    setNewPassword("");
-                    setConfirmPassword("");
-                    setToast("Password updated");
-                  });
-                }}
-              >
-                <label className="field">
-                  <span>New password</span>
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    minLength={8}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span>Confirm new password</span>
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    minLength={8}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                  />
-                </label>
-                <button className="button secondary" disabled={busy}>
-                  Update password
-                </button>
-              </form>
-            </section>
-          </div>
-          <aside className="detail-aside">
-            <h3>Account</h3>
-            <p>{email}</p>
-            <h3>Workspace export</h3>
-            <p>
-              Download accessible projects, documents, Bot definitions and demo
-              transactions. External provider credentials are not included.
-            </p>
+        {heading("Settings", space?.name || "Workspace")}
+        <div
+          className="settings-tabs"
+          role="tablist"
+          aria-label="Settings sections"
+        >
+          {[
+            ["providers", "AI Providers"],
+            ["memory", "Memory"],
+            ["account", "Account & appearance"],
+          ].map(([id, label]) => (
             <button
-              className="button secondary"
-              onClick={() =>
-                downloadFile(
-                  "kova-workspace.json",
-                  JSON.stringify(
-                    {
-                      workspace: space,
-                      records,
-                      exportedAt: new Date().toISOString(),
-                    },
-                    null,
-                    2,
-                  ),
-                  "application/json",
-                )
-              }
+              key={id}
+              role="tab"
+              aria-selected={settingsTab === id}
+              onClick={() => setSettingsTab(id)}
             >
-              <Download />
-              Export workspace
+              {label}
             </button>
-          </aside>
+          ))}
         </div>
+        {settingsTab === "providers" ? (
+          <AIProvidersPanel spaceId={space!.id} role={role} />
+        ) : settingsTab === "memory" ? (
+          <MemoryPanel spaceId={space!.id} role={role} />
+        ) : (
+          <>
+            <div className="detail-layout">
+              <div>
+                <section className="detail-section">
+                  <h2>Appearance</h2>
+                  <ThemePicker />
+                </section>
+                <section className="detail-section">
+                  <h2>Change password</h2>
+                  <form
+                    className="form-stack"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void action(async () => {
+                        if (newPassword !== confirmPassword)
+                          throw Error("Passwords do not match.");
+                        const { error } = await database().auth.updateUser({
+                          password: newPassword,
+                        });
+                        if (error) throw Error(error.message);
+                        setNewPassword("");
+                        setConfirmPassword("");
+                        setToast("Password updated");
+                      });
+                    }}
+                  >
+                    <label className="field">
+                      <span>New password</span>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        required
+                        minLength={8}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Confirm new password</span>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        required
+                        minLength={8}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                      />
+                    </label>
+                    <button className="button secondary" disabled={busy}>
+                      Update password
+                    </button>
+                  </form>
+                </section>
+              </div>
+              <aside className="detail-aside">
+                <h3>Account</h3>
+                <p>{email}</p>
+                <h3>Workspace export</h3>
+                <p>
+                  Download accessible projects, documents, Bot definitions and
+                  demo transactions. External provider credentials are not
+                  included.
+                </p>
+                <button
+                  className="button secondary"
+                  onClick={() =>
+                    downloadFile(
+                      "kova-workspace.json",
+                      JSON.stringify(
+                        {
+                          workspace: space,
+                          records,
+                          exportedAt: new Date().toISOString(),
+                        },
+                        null,
+                        2,
+                      ),
+                      "application/json",
+                    )
+                  }
+                >
+                  <Download />
+                  Export workspace
+                </button>
+              </aside>
+            </div>
+          </>
+        )}
       </>
     );
   }
@@ -1533,7 +1146,7 @@ export function Platform({
       </main>
     );
   return (
-    <div className="platform">
+    <div className="platform kova-v3">
       <aside className={`platform-rail ${mobile ? "open" : ""}`}>
         <BrandMark />
         <select
@@ -1549,6 +1162,13 @@ export function Platform({
             </option>
           ))}
         </select>
+        <button
+          className="workspace-create-link"
+          onClick={() => openCreate("company")}
+        >
+          <Plus size={14} />
+          Create organisation
+        </button>
         <span className="rail-caption">Workspace</span>
         <nav className="platform-nav" aria-label="Main navigation">
           {NAV.map((n) => (
@@ -1564,28 +1184,23 @@ export function Platform({
           ))}
         </nav>
         <div className="rail-bottom">
-          <Link className="rail-credit" href="/credits">
-            <strong>{balance.toLocaleString()}</strong>demo credits available
-          </Link>
-          <div className="rail-profile">
+          <button
+            className="rail-profile profile-trigger"
+            aria-label="Open profile"
+            aria-expanded={profile}
+            onClick={() => setProfile(!profile)}
+          >
             <span className="avatar">{email.slice(0, 1).toUpperCase()}</span>
-            <span>{email}</span>
-            <button
-              className="icon-button ghost"
-              title="Sign out"
-              aria-label="Sign out"
-              onClick={() =>
-                void action(async () => {
-                  const { error } = await database().auth.signOut();
-                  if (error) throw error;
-                  clearSession();
-                  router.replace("/");
-                })
-              }
-            >
-              <LogOut />
-            </button>
-          </div>
+            <span>
+              {profileName}
+              <small>
+                {space.kind === "company"
+                  ? "Organisation account"
+                  : "Personal account"}
+              </small>
+            </span>
+            <MoreHorizontal size={16} />
+          </button>
         </div>
         {mobile && (
           <button className="button quiet" onClick={() => setMobile(false)}>
@@ -1625,7 +1240,14 @@ export function Platform({
             >
               <Bell />
             </Link>
-            <span className="avatar">{email.slice(0, 1).toUpperCase()}</span>
+            <button
+              className="avatar"
+              aria-label="Account and usage"
+              aria-expanded={profile}
+              onClick={() => setProfile(!profile)}
+            >
+              {email.slice(0, 1).toUpperCase()}
+            </button>
           </div>
         </header>
         <main className="platform-content">
@@ -1646,21 +1268,108 @@ export function Platform({
               You have read-only access to this workspace.
             </div>
           )}
-          {view === "projects"
-            ? renderProjects()
-            : view === "bots"
-              ? renderBots()
-              : view === "credits"
-                ? renderCredits()
-                : view === "company"
-                  ? renderCompany()
-                  : view === "approvals"
-                    ? renderInbox()
-                    : view === "integrations"
-                      ? renderIntegrations()
-                      : renderSettings()}
+          {view === "projects" ? (
+            renderProjects()
+          ) : view === "bots" ? (
+            <BotPortal
+              key={space.id}
+              spaceId={space.id}
+              role={role}
+              itemId={itemId}
+            />
+          ) : view === "credits" ? (
+            renderCredits()
+          ) : view === "company" ? (
+            renderCompany()
+          ) : view === "approvals" ? (
+            renderInbox()
+          ) : view === "integrations" ? (
+            renderIntegrations()
+          ) : (
+            renderSettings()
+          )}
         </main>
       </div>
+      {profile && (
+        <>
+          <button
+            className="profile-dismiss"
+            aria-label="Close profile menu"
+            onClick={() => setProfile(false)}
+          />
+          <section
+            ref={profilePanel}
+            className="profile-popover"
+            aria-label="Your account"
+          >
+            <div className="profile-identity">
+              <span className="avatar">{email.slice(0, 1).toUpperCase()}</span>
+              <div>
+                <strong>{profileName}</strong>
+                <small>{email}</small>
+              </div>
+            </div>
+            <div className="profile-usage">
+              <div>
+                <strong>{balance.toLocaleString()} credits</strong>
+                <span>Demo balance</span>
+              </div>
+              <small>Demo purchases are separate from provider billing.</small>
+              {usage ? (
+                <>
+                  <div className="usage-meter-label">
+                    <span>Daily AI requests</span>
+                    <strong>
+                      {usage.requestsUsed} / {usage.requestLimit}
+                    </strong>
+                  </div>
+                  <progress
+                    aria-label="Daily AI requests used"
+                    value={usage.requestsUsed}
+                    max={usage.requestLimit}
+                  />
+                  <small>Resets at midnight UTC. Failed attempts count.</small>
+                </>
+              ) : (
+                <p className="muted">AI usage unavailable</p>
+              )}
+            </div>
+            <Link href="/credits" onClick={() => setProfile(false)}>
+              <Coins size={16} />
+              Credits & usage
+              <ArrowRight size={14} />
+            </Link>
+            <button
+              onClick={() => {
+                setProfile(false);
+                openCreate("checkout");
+              }}
+              disabled={!admin}
+            >
+              <Plus size={16} />
+              Add credits
+            </button>
+            <Link href="/settings" onClick={() => setProfile(false)}>
+              <Settings size={16} />
+              Account settings
+            </Link>
+            <button
+              onClick={() =>
+                void action(async () => {
+                  const result = await database().auth.signOut();
+                  if (result.error) throw result.error;
+                  clearSession();
+                  setProfile(false);
+                  router.replace("/");
+                })
+              }
+            >
+              <LogOut size={16} />
+              Sign out
+            </button>
+          </section>
+        </>
+      )}
       {theme && (
         <Modal title="Color theme" close={() => setTheme(false)}>
           <ThemePicker />
@@ -1786,6 +1495,7 @@ export function Platform({
                       .select("*")
                       .order("created_at");
                     setSpaces(result.data || []);
+                    desiredSpace.current = data;
                     setSpace(result.data?.find((s: Space) => s.id === data));
                     sessionStorage.setItem(`kova:active:${userId}`, data);
                     await load(data);
@@ -1876,13 +1586,15 @@ export function Platform({
                       onChange={(e) => setPrompt(e.target.value)}
                     />
                   </label>
-                  <label className="inline-actions">
-                    <input
-                      type="checkbox"
-                      checked={directBuild}
-                      onChange={(e) => setDirectBuild(e.target.checked)}
-                    />
-                    Start directly in the editor
+                  <label className="field">
+                    <span>Build approach</span>
+                    <select
+                      value={deliveryMode}
+                      onChange={(e) => setDeliveryMode(e.target.value)}
+                    >
+                      <option value="direct">Direct build</option>
+                      <option value="delivery">Product delivery</option>
+                    </select>
                   </label>
                 </>
               )}

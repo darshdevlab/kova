@@ -18,10 +18,12 @@ export type RecordKind =
   | "activity";
 export type RecordData = {
   title: string;
+  deliveryMode?: string;
   description?: string;
   status?: string;
   mode?: string;
   model?: string;
+  providerConnectionId?: string;
   instructions?: string;
   steps?: string[];
   completed?: number;

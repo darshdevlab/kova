@@ -1,68 +1,57 @@
 # Kova
 
-A guided application-building workspace for individuals and companies. Kova combines a Graphite/Jade interface, cloud-backed project planning, a developer editor, and simulated delivery Bot workflows.
+A product-building workspace for individuals and organisations. Start with a requirement and continuous chat, or use a PM-led delivery path with versioned product and technical reviews.
 
-## Run
+[Live application](https://kova-rho-opal.vercel.app) · [Design system](https://kova-rho-opal.vercel.app/design-system)
 
-```bash
-npm install
+## Start here
+
+- [Feature registry and persona journeys](docs/rebuild/README.md): 338 preserved baseline IDs, plus overlapping supplements and corrections.
+- [Delivery status](docs/DELIVERY-STATUS.md): implemented behavior, verification and remaining production gaps.
+- [Design direction](docs/REBUILD-DESIGN.md): Silver/Ink/Jade, shared tokens, responsive rules and reference principles.
+
+## Product paths
+
+**Direct build:** submit a requirement, answer application-specific questions in chat, inspect the generated HTML preview, edit/export/restore saved versions. There is no fixed questionnaire or mandatory PRD/TRD.
+
+**Product delivery:** PM requirements and PRD review, developer TRD review, then build. Document changes invalidate approvals. Protected approval records and database triggers enforce the gates independently of browser UI.
+
+**Bot organisations:** start from a template or blank team, configure members and directed relationships, then use a private team portal with direct/team chats, artifacts and review requests. Execution is a labelled simulation, not a live Lyzr worker engine.
+
+**Individual and company access:** one verified identity, personal and organisation workspaces, scoped membership roles, invitations, profile usage, separate credits and settings.
+
+## Run locally
+
+Use Node.js 22 or 24 and configure ignored `.env.local` using the variable names in `.env.example`. Never commit actual credentials.
+
+```sh
+npm ci
 npm run dev -- --hostname 127.0.0.1 --port 3100
 ```
 
-- Application: http://127.0.0.1:3100
-- Current design system: http://127.0.0.1:3100/design-system
-- Sign in with a configured Supabase account. There is no demo-login bypass.
+Open [localhost:3100](http://127.0.0.1:3100). Sign in with a configured Supabase account; there is no demo-login bypass.
 
-## Current delivery
+The linked Supabase project already has the workspace, memory, provider-vault, usage and delivery-review migrations applied. On a fresh project, use the setup documents and review the SQL dependencies before applying migrations. Files named `*-security-tests.sql` are tests, not migrations; memory/delivery suites bootstrap an empty disposable PostgreSQL database and must never run on the linked project.
 
-Read [delivery status](docs/DELIVERY-STATUS.md) for the verified scope and remaining work. Cloud-backed personal/company workspaces, project briefs and approvals, private Bot URLs, membership controls, simulated credit purchases, and explicit editor saves are implemented. The earlier audit below describes the previous prototype, not a current completion count.
+Provider setup and exact environment requirements: [provider integration](src/lib/providers/README.md). `KOVA_PROVIDER_MASTER_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are server-only. Preserve the encryption master key; replacing it without re-encryption makes saved provider credentials unreadable.
 
-## What works locally
+## Verification
 
-- Project creation, search, source filters, templates, archive/restore.
-- Saved product brief, acceptance criteria, plan approval, PRD export.
-- Persistent conversation and drafts, searchable model catalog, prompt reuse, copy, stop/retry, failure recovery.
-- Context Lens selection and scoped prompts; attachment references (not file ingestion).
-- Interactive sample preview with overview, ticket resolution, customers, and knowledge routes.
-- Editable source draft and export (not connected to the sample preview).
-- Editable React Flow graph: nodes, connections, per-node instructions, graph validation, persistence.
-- Local table/row management and desired authentication configuration.
-- Real checks of six saved configuration conditions, with review invalidation when relevant inputs change.
-- Branch configuration, exportable PR draft, local review gate, and release snapshot/export.
-- Activity history, connection references, invitation drafts, mock variables, theme settings, navigation search.
-- Desktop and mobile versions of every implemented screen.
-
-## Integration boundaries
-
-This is not a completed production platform. The [338-entry implementation audit](docs/FEATURE-COVERAGE.md) records working local, partial, and pending capabilities individually. A visible flow is not proof that its external service is implemented.
-
-Repository cloning, isolated command execution, external tests, real PR creation, user-app deployment, live collaboration, encrypted provider-key management, and most inherited integrations remain pending. The editor can request a self-contained HTML preview from OpenRouter; it is not a generated full-stack repository. Local configuration checks do not run repository tests. A release snapshot does not deploy anything.
-
-The OpenRouter endpoint verifies authentication and workspace membership, requires an explicit account allowlist, and reserves one of ten daily requests before inference. It has no repository-editing, test-running, or deployment tools. The model must not claim these actions. Simulated credits cannot increase real usage limits.
-
-```dotenv
-OPENROUTER_API_KEY=
-KOVA_AI_ALLOWED_EMAILS=
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
-```
-
-Do not store real secrets in local mock variables. No server credentials are committed.
-
-## Design and verification
-
-- [Graphite design rules](docs/DESIGN-SYSTEM-V2.md)
-- [Feature coverage](docs/FEATURE-COVERAGE.md)
-- Visual evidence: `artifacts/redesign/` (local, gitignored)
-- Project thumbnail images: `public/previews/` (captured from the actual sample UI)
-
-```bash
+```sh
 npm run lint
 npm run typecheck
 npm run build
 npm run test:e2e
+node --test tests/providers/providers.test.cjs tests/providers/browser.test.cjs
+npx playwright test --config tests/bots-v2/playwright.config.ts
 ```
 
-The Playwright suite covers local creation-to-release, graph editing, data persistence, verification invalidation, model selection, prompt error recovery, and all workspace screens at desktop/mobile sizes. Model responses are fixtures in these browser tests; live provider behavior is not verified by them.
+Browser suites use explicit API fixtures. The separate opt-in `scripts/live-rebuild-smoke.mjs` uses temporary real accounts and cleans up its own resources. It requires configured server credentials and `KOVA_RUN_LIVE_SMOKE=1`. Optional browser checks use `KOVA_SMOKE_BROWSER=1`; paid model generation stays off unless `KOVA_SMOKE_GENERATE=1` is explicitly set.
 
-Stack: Next.js 16, React 19, TypeScript, React Flow, Lucide, Supabase-ready adapter, OpenRouter text route, Playwright.
+## Important boundaries
+
+This is not a completed 338-feature production platform. Repository import currently stores a GitHub reference; it does not clone or execute a repository. Real PR creation, general sandbox execution, generated backend testing/deployment, Notion runtime publishing, enterprise controls and other registry items remain open.
+
+OpenRouter generation, encrypted BYOK, approved-memory retrieval and selected tenant/approval checks have separate live evidence. Other providers are exercised with fixtures. Google OAuth remains in testing. Shared-key inference uses an account allowlist and daily request cap; demo credits and simulated payments never authorize real provider spending.
+
+Stack: Next.js 16, React 19, TypeScript, Supabase, React Flow, Lucide, OpenRouter and Playwright.
